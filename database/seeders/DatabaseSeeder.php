@@ -17,25 +17,42 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Super Admin',
-            'email' => 'admin@sikeju.com',
-            'password' => \Illuminate\Support\Facades\Hash::make('password'),
-            'role' => 'admin',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'admin@sikeju.com'],
+            [
+                'name' => 'Super Admin',
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'role' => 'admin',
+            ]
+        );
 
-        User::factory()->create([
-            'name' => 'Finance Manager',
-            'email' => 'finance@sikeju.com',
-            'password' => \Illuminate\Support\Facades\Hash::make('password'),
-            'role' => 'finance',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'partner.a@sikeju.com'],
+            [
+                'name' => 'Partner A',
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'role' => 'owner',
+            ]
+        );
 
-        User::factory()->create([
-            'name' => 'Owner',
-            'email' => 'owner@sikeju.com',
-            'password' => \Illuminate\Support\Facades\Hash::make('password'),
-            'role' => 'owner',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'partner.b@sikeju.com'],
+            [
+                'name' => 'Partner B',
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'role' => 'owner',
+            ]
+        );
+
+        User::firstOrCreate(
+            ['email' => 'partner.c@sikeju.com'],
+            [
+                'name' => 'Partner C',
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'role' => 'owner',
+            ]
+        );
+
+        \App\Models\Mitra::ensureTrio();
     }
 }

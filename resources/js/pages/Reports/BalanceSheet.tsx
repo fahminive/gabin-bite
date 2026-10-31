@@ -87,7 +87,7 @@ export default function BalanceSheet({
 
                 {/* Print Title */}
                 <div className="hidden print:block text-center mb-6">
-                    <h1 className="text-2xl font-bold">SIKEJU - LAPORAN NERACA KEUANGAN</h1>
+                    <h1 className="text-2xl font-bold">GABINBITE.PWT — LAPORAN NERACA KEUANGAN</h1>
                     <p className="text-sm text-muted-foreground">
                         Per Tanggal: {date}
                     </p>
@@ -190,12 +190,8 @@ export default function BalanceSheet({
                                 <div className="space-y-2">
                                     <h4 className="font-bold text-xs text-muted-foreground tracking-wider uppercase">Kewajiban / Liabilitas</h4>
                                     <div className="flex justify-between items-center text-sm border-b py-2 pl-4">
-                                        <span>Hutang Dagang / Cicilan</span>
+                                        <span>Kewajiban / Hutang Operasional</span>
                                         <span className="font-semibold">{formatRupiah(liabilities.hutang)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm border-b py-2 pl-4">
-                                        <span>Hutang Pajak PPh Final UMKM</span>
-                                        <span className="font-semibold text-destructive">{formatRupiah(liabilities.hutangPajak)}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm font-bold bg-muted/30 p-2 rounded">
                                         <span>Total Kewajiban</span>

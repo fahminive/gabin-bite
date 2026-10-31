@@ -15,9 +15,14 @@ class UpdatePengeluaranOperasionalRequest extends FormRequest
     {
         return [
             'tanggal' => 'required|date',
-            'kategori' => 'required|string|in:Gaji,Utilitas (Listrik/Air),Sewa Tempat,Transportasi & Bensin,Lain-lain',
+            'kategori' => 'required|string|max:255',
             'nominal' => 'required|numeric|min:0',
             'keterangan' => 'nullable|string',
+            'pre_order_id' => ['nullable', 'exists:pre_orders,id'],
+            'mitra_id' => ['nullable', 'exists:mitras,id'],
+            'metode_pembayaran_id' => ['nullable', 'exists:metode_pembayarans,id'],
+            'is_bersama' => ['nullable', 'boolean'],
+            'sumber_dana' => ['nullable', 'string'],
         ];
     }
 }

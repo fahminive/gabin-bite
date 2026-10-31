@@ -31,6 +31,21 @@ class Pembelian extends Model
         return $this->hasOne(Hutang::class);
     }
 
+    public function mitra()
+    {
+        return $this->belongsTo(Mitra::class);
+    }
+
+    public function preOrder()
+    {
+        return $this->belongsTo(PreOrder::class);
+    }
+
+    public function splitTagihans()
+    {
+        return $this->hasMany(SplitTagihan::class);
+    }
+
     protected static function booted()
     {
         static::deleted(function ($pembelian) {

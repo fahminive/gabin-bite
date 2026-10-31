@@ -28,44 +28,50 @@ export default function ProdukIndex({ user, products }: { user: string, products
     return (
         <>
             <Head title="Produk Jadi" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="flex items-center justify-between gap-4 mb-2">
-                    <h1 className="text-xl font-bold">{user}</h1>
-                    <Link href={create().url}>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Tambah Produk
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-2xl p-3 sm:p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">{user}</h1>
+                        <p className="text-xs text-muted-foreground">Katalog varian dan stok gabin siap jual</p>
+                    </div>
+                    <Link href={create().url} className="w-full sm:w-auto">
+                        <Button className="w-full sm:w-auto rounded-xl h-9 text-xs sm:text-sm">
+                            <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah Produk
                         </Button>
                     </Link>
                 </div>
                 
-                <div className="grid gap-4 md:grid-cols-3 mb-2">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Item Produk</CardTitle>
-                            <Package className="h-4 w-4 text-muted-foreground" />
+                <div className="grid gap-2.5 sm:gap-4 grid-cols-2 md:grid-cols-3 mb-1">
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Total Varian</CardTitle>
+                            <Package className="h-4 w-4 text-primary shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{totalProduk}</div>
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold">{totalProduk}</div>
+                            <p className="text-[10px] text-muted-foreground">Varian aktif</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Stok Gudang</CardTitle>
-                            <PackageOpen className="h-4 w-4 text-muted-foreground" />
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Total Stok</CardTitle>
+                            <PackageOpen className="h-4 w-4 text-amber-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{totalStok}</div>
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400">{totalStok}</div>
+                            <p className="text-[10px] text-muted-foreground">Pcs di etalase</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Estimasi Nilai Jual</CardTitle>
-                            <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+                    <Card className="col-span-2 md:col-span-1 rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Estimasi Nilai Jual</CardTitle>
+                            <CircleDollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 truncate">
                                 {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(totalNilai)}
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Total potensi omset</p>
                         </CardContent>
                     </Card>
                 </div>

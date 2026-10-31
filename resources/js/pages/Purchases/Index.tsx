@@ -24,51 +24,57 @@ export default function PurchasesIndex({ purchases }: Props) {
 
     const totalTransaksi = purchases.length;
     const totalNilai = purchases.reduce((sum, p) => sum + Number(p.total), 0);
-    const totalKredit = purchases.filter(p => p.hutang !== null && p.hutang.status === 'belum_lunas').reduce((sum, p) => sum + Number(p.total), 0);
+    const totalKredit = purchases.filter(p => p.hutang?.status === 'belum_lunas').reduce((sum, p) => sum + Number(p.total), 0);
 
     return (
         <>
             <Head title="Transaksi Pembelian" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="flex items-center justify-between gap-4 mb-2">
-                    <h1 className="text-xl font-bold">Transaksi Pembelian</h1>
-                    <Link href={create().url}>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Tambah Pembelian
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-2xl p-3 sm:p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Transaksi Belanja Bahan</h1>
+                        <p className="text-xs text-muted-foreground">Catatan pengeluaran pembelian bahan baku dapur</p>
+                    </div>
+                    <Link href={create().url} className="w-full sm:w-auto">
+                        <Button className="w-full sm:w-auto rounded-xl h-9 text-xs sm:text-sm">
+                            <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah Pembelian
                         </Button>
                     </Link>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Transaksi</CardTitle>
-                            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 mb-1">
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Total Transaksi</CardTitle>
+                            <ShoppingCart className="h-4 w-4 text-primary shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{totalTransaksi}</div>
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold">{totalTransaksi}</div>
+                            <p className="text-[10px] text-muted-foreground">Nota belanja</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Nilai Pembelian</CardTitle>
-                            <Banknote className="h-4 w-4 text-muted-foreground" />
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Total Belanja</CardTitle>
+                            <Banknote className="h-4 w-4 text-blue-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 truncate">
                                 {formatRupiah(totalNilai)}
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Total uang keluar</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Kredit Berjalan</CardTitle>
-                            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                    <Card className="col-span-2 md:col-span-1 rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Kredit Berjalan</CardTitle>
+                            <TrendingDown className="h-4 w-4 text-red-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-red-600 dark:text-red-400 truncate">
                                 {formatRupiah(totalKredit)}
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Belanja belum lunas</p>
                         </CardContent>
                     </Card>
                 </div>

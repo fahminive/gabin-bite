@@ -3,10 +3,11 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
-import { Trash2, ArrowUpDown, BadgeCheck, Clock, Eye } from 'lucide-react';
+import { Trash2, ArrowUpDown, BadgeCheck, Eye } from 'lucide-react';
 import * as sales from '@/actions/App/Http/Controllers/PenjualanController';
 import { formatRupiah } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { DeliveryBadge, OrderStatusDialog, PaymentBadge } from '@/components/order-status-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,10 +31,15 @@ import {
 export type Penjualan = {
   id: number
   no_faktur: string
+  status: 'draft' | 'diproses' | 'siap' | 'selesai'
+  status_pembayaran: 'belum_bayar' | 'sudah_bayar'
+  status_penyerahan: 'belum_diberikan' | 'sudah_diberikan'
+  tanggal_bayar?: string | null
+  tanggal_diberikan?: string | null
   total: number
   created_at: string
   pelanggan: { nama_pelanggan: string } | null
-  piutang: { status: 'lunas' | 'belum_lunas' } | null
+  pre_order?: { kode: string; keterangan: string } | null
   detail_penjualans: { 
     qty: number;
     produk?: { nama_produk: string; satuan: string }
@@ -113,51 +119,61 @@ export const columns: ColumnDef<Penjualan>[] = [
     cell: ({ row }) => formatRupiah(row.getValue("total"))
   },
   {
-    id: "jenis",
-    header: "Jenis Pembayaran",
-    cell: ({ row }) => {
-      const piutang = row.original.piutang;
-      if (piutang === null) {
-        return <Badge variant="secondary">Tunai</Badge>
-      }
-      if (piutang.status === 'lunas') {
-        return (
-          <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 gap-1">
-            <BadgeCheck className="h-3 w-3" /> Kredit (Lunas)
-          </Badge>
-        )
-      }
-      return (
-        <Badge variant="destructive" className="gap-1">
-          <Clock className="h-3 w-3" /> Kredit (Berjalan)
-        </Badge>
-      )
-    }
+    id: "batch",
+    header: "Batch",
+    cell: ({ row }) => row.original.pre_order
+      ? `${row.original.pre_order.kode} — ${row.original.pre_order.keterangan}`
+      : "-"
+  },
+  {
+    id: "status_pembayaran",
+    header: "Pembayaran",
+    cell: ({ row }) => <PaymentBadge status={row.original.status_pembayaran} />
+  },
+  {
+    id: "status_penyerahan",
+    header: "Penyerahan",
+    cell: ({ row }) => <DeliveryBadge status={row.original.status_penyerahan} />
   },
   {
     id: "actions",
     cell: ({ row }) => {
-      const id = row.original.id;
+      const sale = row.original;
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <OrderStatusDialog sale={sale} />
+
+          {sale.status_penyerahan !== 'sudah_diberikan' && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs font-medium border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+              onClick={() => {
+                router.post(`/sales/${sale.id}/fulfill`);
+              }}
+            >
+              <BadgeCheck className="mr-1 h-3.5 w-3.5 text-emerald-600" /> Serahkan Pesanan
+            </Button>
+          )}
+
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="icon">
+              <Button variant="destructive" size="icon" className="h-8 w-8">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Hapus Transaksi Penjualan?</AlertDialogTitle>
+                <AlertDialogTitle>Hapus Pesanan Pre-Order?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Tindakan ini tidak dapat dibatalkan. Kuantitas stok produk yang berkurang dari penjualan ini akan dikembalikan, dan catatan kas atau piutang yang terkait akan dihapus secara otomatis.
+                  Tindakan ini tidak dapat dibatalkan. Jika pesanan sudah diserahkan, kuantitas stok produk jadi akan dikembalikan.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Batal</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
-                    const action = sales.destroy(id);
+                    const action = sales.destroy(sale.id);
                     router.visit(action.url, { method: 'delete' });
                   }}
                   className="bg-red-600 hover:bg-red-700 focus:ring-red-600"

@@ -98,7 +98,7 @@ export function UserForm({
                     <Input
                         id="email"
                         type="email"
-                        placeholder="Contoh: ali@sikeju.com"
+                        placeholder="Contoh: partner@gabinbite.pwt"
                         value={form.data.email}
                         onChange={(e) =>
                             form.setData(

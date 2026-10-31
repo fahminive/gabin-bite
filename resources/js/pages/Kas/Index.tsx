@@ -58,73 +58,83 @@ export default function KasIndex({ transactions, metrics }: { transactions: KasT
     return (
         <>
             <Head title="Buku Kas Umum" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="flex items-center justify-between gap-4 mb-2">
-                    <h1 className="text-xl font-bold">Buku Kas Umum</h1>
-                    <CreateAdjustment />
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-2xl p-3 sm:p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Buku Kas Umum</h1>
+                        <p className="text-xs text-muted-foreground">Arus lalu lintas uang tunai dan rekening Gabin</p>
+                    </div>
+                    <div className="w-full sm:w-auto">
+                        <CreateAdjustment />
+                    </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Uang Masuk</CardTitle>
-                            <ArrowUpCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 mb-1">
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Total Masuk</CardTitle>
+                            <ArrowUpCircle className="h-4 w-4 text-green-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-green-600 dark:text-green-400 truncate">
                                 {formatRupiah(metrics.totalMasuk)}
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Inflow kas</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Uang Keluar</CardTitle>
-                            <ArrowDownCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Total Keluar</CardTitle>
+                            <ArrowDownCircle className="h-4 w-4 text-red-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-red-600 dark:text-red-400 truncate">
                                 {formatRupiah(metrics.totalKeluar)}
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Outflow kas</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Saldo Kas Saat Ini</CardTitle>
-                            <Landmark className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <Card className="col-span-2 md:col-span-1 rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Saldo Kas Dompet</CardTitle>
+                            <Landmark className="h-4 w-4 text-blue-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className={`text-2xl font-bold ${metrics.saldoSaatIni >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600'}`}>
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className={`text-xl sm:text-2xl font-extrabold truncate ${metrics.saldoSaatIni >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600'}`}>
                                 {formatRupiah(metrics.saldoSaatIni)}
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Uang riil sekarang</p>
                         </CardContent>
                     </Card>
                 </div>
 
                 {/* Filter Controls */}
-                <div className="flex flex-col md:flex-row items-end md:items-center gap-4 bg-muted/40 p-4 rounded-lg border">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold text-muted-foreground">Dari Tanggal</label>
-                            <Input
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="w-full bg-background"
-                            />
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 bg-muted/30 p-3 sm:p-4 rounded-2xl border">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 w-full">
+                        <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[11px] font-bold text-muted-foreground">Dari Tanggal</label>
+                                <Input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="w-full bg-card h-9 rounded-xl text-xs"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[11px] font-bold text-muted-foreground">Sampai Tanggal</label>
+                                <Input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="w-full bg-card h-9 rounded-xl text-xs"
+                                />
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold text-muted-foreground">Sampai Tanggal</label>
-                            <Input
-                                type="date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="w-full bg-background"
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold text-muted-foreground">Sumber Aliran Kas</label>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[11px] font-bold text-muted-foreground">Sumber Aliran Kas</label>
                             <Select value={sumber} onValueChange={setSumber}>
-                                <SelectTrigger className="w-full bg-background">
+                                <SelectTrigger className="w-full bg-card h-9 rounded-xl text-xs">
                                     <SelectValue placeholder="Semua Sumber" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -143,8 +153,8 @@ export default function KasIndex({ transactions, metrics }: { transactions: KasT
                     </div>
                     
                     {(startDate || endDate || sumber !== 'all') && (
-                        <Button variant="outline" size="icon" onClick={resetFilters} className="shrink-0" title="Hapus Filter">
-                            <X className="h-4 w-4" />
+                        <Button variant="outline" size="sm" onClick={resetFilters} className="shrink-0 h-9 rounded-xl text-xs flex items-center justify-center gap-1" title="Hapus Filter">
+                            <X className="h-3.5 w-3.5" /> Reset Filter
                         </Button>
                     )}
                 </div>

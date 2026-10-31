@@ -1,7 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
-import { FolderGit2, LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, Wrench, BadgeDollarSign, Banknote, ChartCandlestick, Activity, ShoppingCart, TrendingDown, TrendingUp, Weight, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, ReceiptText, Users } from 'lucide-react';
+import { LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, Wrench, BadgeDollarSign, Banknote, ChartCandlestick, Activity, ShoppingCart, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, Users, Split, CalendarDays } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -12,6 +11,7 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
@@ -25,12 +25,10 @@ import * as cash from '@/actions/App/Http/Controllers/KasController';
 import * as modals from '@/actions/App/Http/Controllers/ModalController';
 import * as expenses from '@/actions/App/Http/Controllers/PengeluaranOperasionalController';
 import * as purchases from '@/actions/App/Http/Controllers/PembelianController';
-import * as payables from '@/actions/App/Http/Controllers/HutangController';
 import * as productions from '@/actions/App/Http/Controllers/ProduksiController';
 import * as stockCorrections from '@/actions/App/Http/Controllers/KoreksiStokController';
-import * as sales from '@/actions/App/Http/Controllers/PenjualanController';
-import * as receivables from '@/actions/App/Http/Controllers/PiutangController';
 import * as reports from '@/actions/App/Http/Controllers/LaporanController';
+import * as preOrders from '@/actions/App/Http/Controllers/PreOrderController';
 import * as users from '@/actions/App/Http/Controllers/UserController';
 
 const mainNavItems: NavItem[] = [
@@ -58,7 +56,12 @@ const masterDataNavItems: NavItem[] = [
         icon: TruckIcon,
     },
     {
-        title: 'Pelanggan',
+        title: 'Batch Pre-Order',
+        href: preOrders.index(),
+        icon: CalendarDays,
+    },
+    {
+        title: 'Pelanggan & Pre-Order',
         href: customers.index(),
         icon: BookUser,
     },
@@ -90,42 +93,29 @@ const financeNavItems: NavItem[] = [
         href: expenses.index(),
         icon: Activity
     },
+    {
+        title: 'Patungan Partner',
+        href: '/split-bills',
+        icon: Split
+    },
 ]
 
 const purchaseNavItems: NavItem[] = [
     {
-        title: 'Transaksi Pembelian',
+        title: 'Belanja Bahan (PO)',
         href: purchases.index(),
         icon: ShoppingCart
-    },
-    {
-        title: 'Hutang Usaha',
-        href: payables.index(),
-        icon: TrendingDown
-    },
-]
-
-const salesNavItems: NavItem[] = [
-    {
-        title: 'Transaksi Penjualan',
-        href: sales.index(),
-        icon: ShoppingCart
-    },
-    {
-        title: 'Piutang Usaha',
-        href: receivables.index(),
-        icon: TrendingUp
     },
 ]
 
 const productionNavItems: NavItem[] = [
     {
-        title: 'Produksi',
+        title: 'Produksi Gabin',
         href: productions.index(),
         icon: CookingPot
     },
     {
-        title: 'Koreksi Stok',
+        title: 'Hitung Ulang Stok',
         href: stockCorrections.index(),
         icon: SearchCheck
     },
@@ -133,37 +123,25 @@ const productionNavItems: NavItem[] = [
 
 const reportNavItems: NavItem[] = [
     {
-        title: 'Laba Rugi',
+        title: 'Cuan / Boncos',
         href: reports.incomeStatement(),
         icon: BookOpenText,
     },
     {
-        title: 'Arus Kas',
+        title: 'Uang Masuk-Keluar',
         href: reports.cashFlow(),
         icon: ArrowDownUp,
     },
     {
-        title: 'Posisi Keuangan',
+        title: 'Kesehatan Dompet',
         href: reports.balanceSheet(),
         icon: Scale,
     },
-    {
-        title: 'Pajak (PPh Final)',
-        href: reports.taxReport(),
-        icon: ReceiptText,
-    },
 ]
-
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/faqihardi/sikeju-bookeeping',
-        icon: FolderGit2,
-    },
-];
 
 export function AppSidebar() {
     const { auth } = usePage().props as any;
+    const { isMobile, setOpenMobile } = useSidebar();
     const userRole = auth?.user?.role;
     const isOwner = userRole === 'owner';
 
@@ -173,7 +151,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
+                            <Link href={dashboard()} prefetch onClick={() => isMobile && setOpenMobile(false)}>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>
@@ -182,33 +160,35 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} group='Platform' />
+                <NavMain items={mainNavItems} group='Ruang Utama' />
                 {userRole === 'admin' && (
-                    <NavMain 
+                    <NavMain
                         items={[
                             {
-                                title: 'Manajemen Pengguna',
+                                title: 'Tim Gabin',
                                 href: users.index(),
                                 icon: Users,
                             }
-                        ]} 
-                        group='Admin Root' 
+                        ]}
+                        group='Bos Besar'
                     />
                 )}
-                {!isOwner && (
-                    <>
-                        <NavMain items={masterDataNavItems} group='Master Data' />
-                        <NavMain items={financeNavItems} group='Keuangan & Kas' />
-                        <NavMain items={purchaseNavItems} group='Pembelian' />
-                        <NavMain items={salesNavItems} group='Penjualan' />
-                        <NavMain items={productionNavItems} group='Produksi' />
-                    </>
-                )}
-                <NavMain items={reportNavItems} group='Laporan' />
+                <NavMain items={masterDataNavItems} group='Data Dapur' />
+                <NavMain items={financeNavItems} group='Duit & Dompet' />
+                <NavMain items={purchaseNavItems} group='Belanja' />
+                <NavMain items={productionNavItems} group='Bikin Gabin' />
+                <NavMain items={reportNavItems} group='Laporan Cuan' />
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+                <div className="mx-2 mb-2 hidden rounded-2xl bg-sidebar-accent/70 p-3 text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+                    <p className="font-display text-sm font-extrabold">
+                        Gabin renyah, buku rapi.
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-medium opacity-70">
+                        Es krim lumer? Catat dulu. 🍦
+                    </p>
+                </div>
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

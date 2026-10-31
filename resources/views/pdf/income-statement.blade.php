@@ -111,7 +111,7 @@
                 <p>Mengetahui,</p>
                 <br><br><br>
                 <p style="text-decoration: underline; font-weight: bold; margin-bottom: 0;">Bagian Keuangan</p>
-                <p style="font-size: 8pt; color: #718096; margin-top: 0;">CV. MAKARONI KEJU</p>
+                <p style="font-size: 8pt; color: #718096; margin-top: 0;">gabinbite.pwt</p>
             </div>
         </td>
     </tr>

@@ -33,6 +33,9 @@ export type Pembelian = {
   total: number
   created_at: string
   pemasok: { nama_pemasok: string } | null
+  mitra: { nama: string; kode: string } | null
+  pre_order: { kode: string; keterangan: string } | null
+  sumber_dana: 'pribadi' | 'simpanan_usaha'
   hutang: { status: 'lunas' | 'belum_lunas' } | null
   detail_pembelians: {
     qty: number;
@@ -71,6 +74,18 @@ export const columns: ColumnDef<Pembelian>[] = [
     id: "pemasok",
     header: "Pemasok",
     cell: ({ row }) => row.original.pemasok?.nama_pemasok ?? "-"
+  },
+  {
+    id: "partner",
+    header: "Dibayar Oleh / Split Bill",
+    cell: ({ row }) => row.original.sumber_dana === 'pribadi'
+      ? <div><div>{row.original.mitra?.nama ?? 'Partner tidak diketahui'}</div><Badge variant="outline">Masuk Split Bill</Badge></div>
+      : <div><div>Simpanan Usaha</div><Badge variant="secondary">Tanpa Split Bill</Badge></div>
+  },
+  {
+    id: "batch",
+    header: "Batch Pre-Order",
+    cell: ({ row }) => row.original.pre_order ? `${row.original.pre_order.kode} — ${row.original.pre_order.keterangan}` : "-"
   },
   {
     id: "items",
@@ -117,7 +132,7 @@ export const columns: ColumnDef<Pembelian>[] = [
     header: "Jenis Pembayaran",
     cell: ({ row }) => {
       const hutang = row.original.hutang;
-      if (hutang === null) {
+      if (!hutang) {
         return <Badge variant="secondary">Tunai</Badge>
       }
       if (hutang.status === 'lunas') {

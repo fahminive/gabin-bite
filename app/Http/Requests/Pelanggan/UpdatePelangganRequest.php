@@ -17,10 +17,12 @@ class UpdatePelangganRequest extends FormRequest
      */
     public function rules(): array
     {
+        $pelangganId = $this->route('customer')?->id ?? $this->route('pelanggan')?->id;
         return [
-            'kode' => 'required|string|max:20|unique:pelanggans,kode,' . $this->route('customer')->id,
-            'nama_pelanggan' => 'required|string|min:3|max:100',
-            'no_telepon' => 'nullable|string|max:20',
+            'kode' => 'required|string|max:20|unique:pelanggans,kode,' . $pelangganId,
+            'nama_pelanggan' => 'required|string|min:1|max:100',
+            'no_telepon' => 'nullable|string|max:30',
+            'alamat' => 'nullable|string',
         ];
     }
 }

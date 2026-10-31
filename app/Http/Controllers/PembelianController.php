@@ -2,121 +2,125 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Kas;
-use App\Models\Pembelian;
 use App\Models\BahanBaku;
-use App\Models\Pemasok;
 use App\Models\MetodePembayaran;
+use App\Models\Mitra;
+use App\Models\Pemasok;
+use App\Models\Pembelian;
+use App\Models\PreOrder;
+use App\Models\SplitTagihan;
+use App\Services\SplitBillService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class PembelianController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $purchases = Pembelian::with(['pemasok', 'detailPembelians.bahanBaku', 'hutang'])->orderBy('created_at', 'desc')->get();
+        $query = Pembelian::with(['pemasok', 'mitra', 'preOrder', 'hutang', 'detailPembelians.bahanBaku', 'splitTagihans.mitra']);
+
+        if ($request->filled('pre_order_id')) {
+            $query->where('pre_order_id', $request->input('pre_order_id'));
+        }
+
+        $purchases = $query->orderBy('created_at', 'desc')->get();
+
         return Inertia::render('Purchases/Index', [
-            'purchases' => $purchases
+            'purchases' => $purchases,
+            'batches' => PreOrder::orderByDesc('created_at')->get(),
+            'filters' => ['pre_order_id' => $request->input('pre_order_id')],
         ]);
     }
 
     public function create()
     {
+        Mitra::ensureTrio();
+
         return Inertia::render('Purchases/Create', [
             'pemasoks' => Pemasok::orderBy('kode', 'asc')->get(),
             'bahanBakus' => BahanBaku::orderBy('kode', 'asc')->get(),
             'metodePembayarans' => MetodePembayaran::orderBy('nama_metode')->get(),
+            'mitras' => Mitra::orderBy('kode')->get(),
+            'batches' => PreOrder::where('status', 'buka')->orderByDesc('tanggal_mulai')->get(),
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, SplitBillService $splitBill)
     {
         $validated = $request->validate([
             'pemasok_id' => 'required|exists:pemasoks,id',
             'metode_pembayaran_id' => 'required|exists:metode_pembayarans,id',
+            'sumber_dana' => ['required', 'string', 'in:pribadi,simpanan_usaha'],
+            'mitra_id' => ['required_if:sumber_dana,pribadi', 'nullable', 'exists:mitras,id'],
             'nama_pembelian' => 'required|string|max:255',
-            'jenis_pembayaran' => 'required|in:Tunai,Kredit',
-            'tgl_jatuh_tempo' => 'required_if:jenis_pembayaran,Kredit|nullable|date',
+            'pre_order_id' => 'nullable|exists:pre_orders,id',
             'items' => 'required|array|min:1',
             'items.*.bahan_baku_id' => 'required|exists:bahan_bakus,id',
-            'items.*.qty' => 'required|numeric|min:1',
-            'items.*.harga_satuan' => 'required|numeric|min:0',
+            'items.*.qty_masuk_stok' => 'required|numeric|min:1',
+            'items.*.harga_satuan' => 'required|integer|min:0',
         ]);
 
-        // --- VALIDASI SALDO KAS (hanya untuk pembelian Tunai) ---
-        if ($validated['jenis_pembayaran'] === 'Tunai') {
-            $totalPembelian = collect($validated['items'])->sum(fn($item) => $item['qty'] * $item['harga_satuan']);
-            $saldoKas = Kas::sum('masuk') - Kas::sum('keluar');
-            if ($totalPembelian > $saldoKas) {
-                return back()->withErrors([
-                    'jenis_pembayaran' => "Saldo kas perusahaan tidak mencukupi untuk pembelian tunai ini. Saldo saat ini: Rp " . number_format($saldoKas, 0, ',', '.') . ". Pertimbangkan pembayaran Kredit."
-                ])->withInput();
+        if (! empty($validated['pre_order_id'])) {
+            $batch = PreOrder::find($validated['pre_order_id']);
+            if (! $batch || $batch->status !== 'buka') {
+                return back()->withErrors(['pre_order_id' => 'Batch pre-order sudah ditutup. Pilih batch yang masih aktif.'])->withInput();
             }
         }
-        // ----------------------------------------------------------
 
-        DB::transaction(function () use ($validated) {
-            $totalPembelian = collect($validated['items'])->sum(function ($item) {
-                return $item['qty'] * $item['harga_satuan'];
-            });
+        $totalPembelian = collect($validated['items'])->sum(fn ($item) => (int) $item['qty_masuk_stok'] * $item['harga_satuan']);
 
-            // 1. Simpan Header Pembelian
+        DB::transaction(function () use ($validated, $totalPembelian, $splitBill) {
             $pembelian = Pembelian::create([
                 'pemasok_id' => $validated['pemasok_id'],
                 'metode_pembayaran_id' => $validated['metode_pembayaran_id'],
+                'mitra_id' => $validated['sumber_dana'] === 'pribadi' ? $validated['mitra_id'] : null,
+                'pre_order_id' => $validated['pre_order_id'] ?? null,
                 'nama_pembelian' => $validated['nama_pembelian'],
                 'total' => $totalPembelian,
+                'sumber_dana' => $validated['sumber_dana'],
             ]);
 
-            // 2. Looping Items (Detail Pembelian & Stok)
             foreach ($validated['items'] as $item) {
                 $bahanBaku = BahanBaku::findOrFail($item['bahan_baku_id']);
 
+                $qtyMasukStok = (int) $item['qty_masuk_stok'];
+
                 $pembelian->detailPembelians()->create([
                     'bahan_baku_id' => $item['bahan_baku_id'],
-                    'qty' => $item['qty'],
+                    'qty' => $qtyMasukStok,
                     'harga_satuan' => $item['harga_satuan'],
-                    'subtotal' => $item['qty'] * $item['harga_satuan'],
+                    'subtotal' => $qtyMasukStok * $item['harga_satuan'],
                     'satuan' => $bahanBaku->satuan,
                 ]);
 
-                $bahanBaku->increment('stok', $item['qty']);
+                $bahanBaku->increment('stok', $qtyMasukStok);
             }
 
-            // 3. Evaluasi Jenis Pembayaran
-            if ($validated['jenis_pembayaran'] === 'Tunai') {
-                $pembelian->kas()->create([
-                    'tanggal' => now()->toDateString(),
-                    'keterangan' => 'Pembelian Tunai: ' . $validated['nama_pembelian'],
-                    'masuk' => 0, 
-                    'keluar' => $totalPembelian, 
-                    'sumber' => 'pembelian'
-                ]);
-            } else {
-                $pembelian->hutang()->create([
-                    'nominal' => $totalPembelian,
-                    'status' => 'belum_lunas',
-                    'tgl_jatuh_tempo' => $validated['tgl_jatuh_tempo'],
-                ]);
+            // Split bill hanya dibuat ketika partner membayar dari pribadi.
+            // Jika dibayar dari simpanan usaha, tidak ada utang partner yang terbentuk.
+            if ($validated['sumber_dana'] === 'pribadi') {
+                $splitBill->createForPembelian($pembelian);
             }
         });
 
-        return redirect()->route('purchases.index')->with('success', 'Transaksi Pembelian Berhasil Dicatat.');
+        return redirect()->route('purchases.index')->with('success', 'Pembelian bahan baku berhasil dicatat.');
     }
 
     public function destroy(Pembelian $purchase)
     {
         DB::transaction(function () use ($purchase) {
-            // Revert stok bahan baku
             foreach ($purchase->detailPembelians as $detail) {
-                $detail->bahanBaku->decrement('stok', $detail->qty);
+                if ($detail->bahanBaku) {
+                    $detail->bahanBaku->decrement('stok', $detail->qty);
+                }
             }
-            
-            // Delete Pembelian (this will trigger cascade deletes for detail_pembelians, hutangs, and the booted event for kas)
+
+            SplitTagihan::where('pembelian_id', $purchase->id)->delete();
+
             $purchase->delete();
         });
 
-        return redirect()->route('purchases.index')->with('success', 'Transaksi Pembelian berhasil dihapus dan stok telah dikembalikan.');
+        return redirect()->route('purchases.index')->with('success', 'Pembelian dihapus dan stok bahan dikembalikan.');
     }
 }

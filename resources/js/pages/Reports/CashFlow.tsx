@@ -103,7 +103,7 @@ export default function CashFlow({
 
                 {/* Print Title */}
                 <div className="hidden print:block text-center mb-6">
-                    <h1 className="text-2xl font-bold">SIKEJU - LAPORAN ARUS KAS</h1>
+                    <h1 className="text-2xl font-bold">GABINBITE.PWT — LAPORAN ARUS KAS</h1>
                     <p className="text-sm text-muted-foreground">
                         Periode: {startDate} s/d {endDate}
                     </p>

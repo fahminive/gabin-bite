@@ -29,37 +29,42 @@ export default function ProductionIndex({ productions, metrics }: { productions:
     return (
         <>
             <Head title="Riwayat Produksi" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="flex items-center justify-between gap-4 mb-2">
-                    <h1 className="text-xl font-bold">Produksi & Manufaktur</h1>
-                    <Link href={create().url}>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Mulai Produksi
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-2xl p-3 sm:p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Produksi & Manufaktur</h1>
+                        <p className="text-xs text-muted-foreground">Konversi bahan baku menjadi gabin es krim siap saji</p>
+                    </div>
+                    <Link href={create().url} className="w-full sm:w-auto">
+                        <Button className="w-full sm:w-auto rounded-xl h-9 text-xs sm:text-sm">
+                            <Plus className="mr-1.5 h-3.5 w-3.5" /> Mulai Produksi
                         </Button>
                     </Link>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Hasil Produksi (Bulan Ini)</CardTitle>
-                            <CookingPot className="h-4 w-4 text-muted-foreground" />
+                <div className="grid grid-cols-2 gap-2.5 sm:gap-4 mb-1">
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Hasil Produksi</CardTitle>
+                            <CookingPot className="h-4 w-4 text-blue-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                                {metrics.totalHasilBulanIni} Pcs / Pack
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 truncate">
+                                {metrics.totalHasilBulanIni} Pcs
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Bulan ini</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Jumlah Batch Produksi (Bulan Ini)</CardTitle>
-                            <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Batch Produksi</CardTitle>
+                            <ClipboardList className="h-4 w-4 text-emerald-500 shrink-0" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 truncate">
                                 {metrics.totalTransaksiBulanIni} Batch
                             </div>
+                            <p className="text-[10px] text-muted-foreground">Bulan ini</p>
                         </CardContent>
                     </Card>
                 </div>

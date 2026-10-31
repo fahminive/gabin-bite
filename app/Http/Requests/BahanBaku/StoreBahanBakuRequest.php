@@ -27,6 +27,7 @@ class StoreBahanBakuRequest extends FormRequest
             'nama_bahan' => 'required|string|min:3|max:100',
             'stok' => 'nullable|numeric|min:0',
             'satuan'=> 'required|string',
+            'netto_pcs' => 'nullable|numeric|min:0',
             'harga_satuan' => 'required|numeric|min:1'
         ];
     }

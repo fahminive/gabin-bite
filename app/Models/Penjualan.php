@@ -28,9 +28,19 @@ class Penjualan extends Model
         return $this->hasMany(DetailPenjualan::class);
     }
 
+    public function preOrder(): BelongsTo
+    {
+        return $this->belongsTo(PreOrder::class);
+    }
+
     public function piutang(): HasOne
     {
         return $this->hasOne(Piutang::class);
+    }
+
+    public function isOpenPreOrder(): bool
+    {
+        return $this->status !== 'selesai';
     }
 
     public function kas()

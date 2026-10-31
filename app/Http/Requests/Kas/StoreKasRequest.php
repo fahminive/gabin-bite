@@ -18,6 +18,8 @@ class StoreKasRequest extends FormRequest
             'tipe_penyesuaian' => 'required|string|in:masuk,keluar',
             'nominal' => 'required|numeric|min:0',
             'keterangan' => 'required|string',
+            'sumber_dana' => ['required', 'string', 'in:simpanan_usaha,pribadi'],
+            'mitra_id' => ['required_if:sumber_dana,pribadi', 'nullable', 'exists:mitras,id'],
         ];
     }
 }

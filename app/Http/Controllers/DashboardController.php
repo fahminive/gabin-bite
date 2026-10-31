@@ -2,26 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Kas;
-use App\Models\Penjualan;
-use App\Models\PengeluaranOperasional;
 use App\Models\BahanBaku;
-use App\Models\Piutang;
-use App\Models\PembayaranPiutang;
-use App\Models\Hutang;
-use App\Models\PembayaranHutang;
-use App\Models\Produk;
-use App\Models\Peralatan;
+use App\Models\Kas;
 use App\Models\Modal;
+use App\Models\Pembelian;
+use App\Models\PengeluaranOperasional;
+use App\Models\Penjualan;
+use App\Models\Peralatan;
+use App\Models\PreOrder;
+use App\Models\Produk;
+use App\Services\SplitBillService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, SplitBillService $splitBill)
     {
+        $preOrderId = $request->input('pre_order_id');
         $template = $request->input('timeline_template', '30_days');
 
         switch ($template) {
@@ -52,36 +52,49 @@ class DashboardController extends Controller
         $endDateObj = Carbon::parse($endDate);
 
         // 1. Saldo Kas Akhir Periode
-        $saldoKas = (float) (Kas::where('tanggal', '<=', $endDate)->sum('masuk') 
+        $saldoKas = (float) (Kas::where('tanggal', '<=', $endDate)->sum('masuk')
             - Kas::where('tanggal', '<=', $endDate)->sum('keluar'));
 
-        // 2. Pendapatan, HPP, Operasional, Laba Bersih
-        $pendapatan = (float) Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])->sum('total');
+        // Build filters
+        $penjualanQuery = Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        $pembelianQuery = Pembelian::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        $operasionalQuery = PengeluaranOperasional::whereBetween('tanggal', [$startDate, $endDate]);
 
-        $hpp = (float) DB::table('detail_penjualans')
+        if ($preOrderId) {
+            $penjualanQuery->where('pre_order_id', $preOrderId);
+            $pembelianQuery->where('pre_order_id', $preOrderId);
+            $operasionalQuery->where('pre_order_id', $preOrderId);
+        }
+
+        // 2. Pendapatan, HPP, Operasional, Laba Bersih
+        $pendapatan = (float) $penjualanQuery->clone()->sum('total');
+
+        $hppQuery = DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
-            ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate])
-            ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
+            ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate]);
+        if ($preOrderId) {
+            $hppQuery->where('penjualans.pre_order_id', $preOrderId);
+        }
+        $hpp = (float) $hppQuery->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
 
         $labaKotor = $pendapatan - $hpp;
 
-        $operasional = (float) PengeluaranOperasional::whereBetween('tanggal', [$startDate, $endDate])->sum('nominal');
+        $operasional = (float) $operasionalQuery->clone()->sum('nominal');
+        $pembelianBahan = (float) $pembelianQuery->clone()->sum('total');
 
         $labaBersih = $labaKotor - $operasional;
 
-        // 3. Piutang Akhir Periode
-        $totalPiutang = Piutang::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('nominal');
-        $totalPembayaranPiutang = PembayaranPiutang::where('tanggal', '<=', $endDate)->sum('nominal_bayar');
-        $piutangAktif = (float) ($totalPiutang - $totalPembayaranPiutang);
-
-        // 4. Hutang Akhir Periode
-        $totalHutang = Hutang::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('nominal');
-        $totalPembayaranHutang = PembayaranHutang::where('tanggal', '<=', $endDate)->sum('nominal_bayar');
-        $hutangAktif = (float) ($totalHutang - $totalPembayaranHutang);
+        $preOrderAktif = (float) Penjualan::where('status', '!=', 'selesai')
+            ->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
+            ->sum('total');
 
         // 5. Tren Pendapatan Harian (Daily Line Chart)
-        $dailyRevenueRaw = Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
+        $dailyRevenueQuery = Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        if ($preOrderId) {
+            $dailyRevenueQuery->where('pre_order_id', $preOrderId);
+        }
+        $dailyRevenueRaw = $dailyRevenueQuery
             ->select(DB::raw('DATE(created_at) as date'), DB::raw('SUM(total) as total'))
             ->groupBy('date')
             ->pluck('total', 'date')
@@ -169,20 +182,14 @@ class DashboardController extends Controller
         ];
 
         // 10. Neraca Mini (Harta/Aset vs Kewajiban & Ekuitas)
-        $kasNeraca = (float) (Kas::where('tanggal', '<=', $endDate)->sum('masuk') 
+        $kasNeraca = (float) (Kas::where('tanggal', '<=', $endDate)->sum('masuk')
             - Kas::where('tanggal', '<=', $endDate)->sum('keluar'));
-        $totalPiutangNeraca = Piutang::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('nominal');
-        $totalPembayaranPiutangNeraca = PembayaranPiutang::where('tanggal', '<=', $endDate)->sum('nominal_bayar');
-        $piutangNeraca = (float) ($totalPiutangNeraca - $totalPembayaranPiutangNeraca);
         $persediaanBahan = (float) BahanBaku::sum(DB::raw('stok * harga_satuan'));
         $persediaanProduk = (float) Produk::sum(DB::raw('stok * hpp'));
-        $totalAsetLancar = $kasNeraca + $piutangNeraca + $persediaanBahan + $persediaanProduk;
+        $totalAsetLancar = $kasNeraca + $persediaanBahan + $persediaanProduk;
         $peralatan = (float) Peralatan::where('tgl_beli', '<=', $endDate)->sum('harga_perolehan');
         $totalAset = $totalAsetLancar + $peralatan;
-
-        $totalHutang = Hutang::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('nominal');
-        $totalPembayaranHutang = PembayaranHutang::where('tanggal', '<=', $endDate)->sum('nominal_bayar');
-        $hutang = (float) ($totalHutang - $totalPembayaranHutang);
+        $hutang = 0.0;
         $modal = (float) Modal::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('nominal');
         $pendapatanKumulatif = Penjualan::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('total');
         $hppKumulatif = DB::table('detail_penjualans')
@@ -249,33 +256,34 @@ class DashboardController extends Controller
                 ];
             });
 
-        // 14. Piutang Jatuh Tempo Terdekat (5 teratas)
-        $dueReceivables = Piutang::with(['penjualan.pelanggan'])
-            ->where('status', 'belum_lunas')
-            ->orderBy('tgl_jatuh_tempo', 'asc')
-            ->limit(5)
-            ->get()
-            ->map(function ($item) {
-                $totalPaid = $item->pembayaranPiutangs()->sum('nominal_bayar');
-                return [
-                    'id' => $item->id,
-                    'no_faktur' => $item->penjualan->no_faktur ?? '-',
-                    'pelanggan' => $item->penjualan->pelanggan->nama_pelanggan ?? 'Umum',
-                    'nominal' => (float) $item->nominal,
-                    'sisa_tagihan' => (float) ($item->nominal - $totalPaid),
-                    'tgl_jatuh_tempo' => $item->tgl_jatuh_tempo,
-                ];
-            });
+        $neededMaterials = $this->materialsNeededForOpenOrders();
+        $partnerBalances = $splitBill->balances($preOrderId ? (int) $preOrderId : null);
 
         return Inertia::render('dashboard', [
             'startDate' => $startDate,
             'endDate' => $endDate,
             'timelineTemplate' => $template,
+            'preOrderId' => $preOrderId,
+            'batches' => PreOrder::orderByDesc('created_at')->get(),
             'metrics' => [
                 'saldoKas' => $saldoKas,
                 'labaBersih' => $labaBersih,
-                'piutangAktif' => $piutangAktif,
-                'hutangAktif' => $hutangAktif,
+                'preOrderAktif' => $preOrderAktif,
+                'splitOutstanding' => collect($partnerBalances)->sum(fn ($row) => max(0, -$row['saldo'])),
+                'pendapatan' => $pendapatan,
+                'pengeluaran' => $operasional + $pembelianBahan,
+                'pengeluaranBahan' => $pembelianBahan,
+                'pengeluaranOperasional' => $operasional,
+                'jumlahPesanan' => $penjualanQuery->clone()->count(),
+                'jumlahPelanggan' => DB::table('pelanggans')->whereExists(function ($q) use ($preOrderId, $startDate, $endDate) {
+                    $q->select(DB::raw(1))
+                        ->from('penjualans')
+                        ->whereColumn('penjualans.pelanggan_id', 'pelanggans.id')
+                        ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate]);
+                    if ($preOrderId) {
+                        $q->where('penjualans.pre_order_id', $preOrderId);
+                    }
+                })->count(),
             ],
             'incomeTrend' => $incomeTrend,
             'cashFlowTrend' => $cashFlowTrend,
@@ -293,7 +301,53 @@ class DashboardController extends Controller
             'topSuppliers' => $topSuppliers,
             'bestSellers' => $bestSellers,
             'criticalMaterials' => $criticalMaterials,
-            'dueReceivables' => $dueReceivables,
+            'neededMaterials' => $neededMaterials,
+            'partnerBalances' => $partnerBalances,
         ]);
+    }
+
+    private function materialsNeededForOpenOrders(): array
+    {
+        $openOrders = Penjualan::with(['detailPenjualans.produk.reseps.bahanBaku'])
+            ->where('status', '!=', 'selesai')
+            ->get();
+
+        $needed = [];
+
+        foreach ($openOrders as $order) {
+            foreach ($order->detailPenjualans as $detail) {
+                foreach ($detail->produk?->reseps ?? [] as $resep) {
+                    $bahan = $resep->bahanBaku;
+                    if (! $bahan) {
+                        continue;
+                    }
+
+                    $key = $bahan->id;
+                    if (! isset($needed[$key])) {
+                        $needed[$key] = [
+                            'id' => $bahan->id,
+                            'nama' => $bahan->nama_bahan,
+                            'satuan' => $bahan->satuan,
+                            'stok' => (float) $bahan->stok,
+                            'dibutuhkan' => 0.0,
+                        ];
+                    }
+
+                    $needed[$key]['dibutuhkan'] += $detail->qty * $resep->qty;
+                }
+            }
+        }
+
+        return collect($needed)
+            ->map(function ($row) {
+                $row['kurang'] = max(0, $row['dibutuhkan'] - $row['stok']);
+
+                return $row;
+            })
+            ->filter(fn ($row) => $row['kurang'] > 0)
+            ->sortByDesc('kurang')
+            ->values()
+            ->take(8)
+            ->all();
     }
 }

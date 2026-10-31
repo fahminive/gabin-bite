@@ -2,23 +2,31 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Penjualan;
-use App\Models\Pelanggan;
-use App\Models\Produk;
 use App\Models\MetodePembayaran;
+use App\Models\Pelanggan;
+use App\Models\Penjualan;
+use App\Models\PreOrder;
+use App\Models\Produk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class PenjualanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $sales = Penjualan::with(['pelanggan', 'detailPenjualans.produk', 'piutang'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = Penjualan::with(['pelanggan', 'detailPenjualans.produk', 'preOrder']);
+
+        if ($request->filled('pre_order_id')) {
+            $query->where('pre_order_id', $request->input('pre_order_id'));
+        }
+
+        $sales = $query->orderBy('created_at', 'desc')->get();
+
         return Inertia::render('Sales/Index', [
-            'sales' => $sales
+            'sales' => $sales,
+            'batches' => PreOrder::orderByDesc('created_at')->get(),
+            'filters' => ['pre_order_id' => $request->input('pre_order_id')],
         ]);
     }
 
@@ -28,6 +36,7 @@ class PenjualanController extends Controller
             'customers' => Pelanggan::orderBy('kode', 'asc')->get(),
             'products' => Produk::orderBy('kode', 'asc')->get(),
             'paymentMethods' => MetodePembayaran::orderBy('nama_metode')->get(),
+            'batches' => PreOrder::where('status', 'buka')->orderByDesc('tanggal_mulai')->get(),
         ]);
     }
 
@@ -36,99 +45,188 @@ class PenjualanController extends Controller
         $validated = $request->validate([
             'pelanggan_id' => 'required|exists:pelanggans,id',
             'metode_pembayaran_id' => 'required|exists:metode_pembayarans,id',
+            'pre_order_id' => 'nullable|exists:pre_orders,id',
             'no_faktur' => 'nullable|string|max:255',
-            'jenis_pembayaran' => 'required|in:Tunai,Kredit',
-            'tgl_jatuh_tempo' => 'required_if:jenis_pembayaran,Kredit|nullable|date',
             'items' => 'required|array|min:1',
             'items.*.produk_id' => 'required|exists:produks,id',
             'items.*.qty' => 'required|numeric|min:1',
             'items.*.harga_satuan' => 'required|numeric|min:0',
+            'status_pembayaran' => 'nullable|in:belum_bayar,sudah_bayar',
+            'status_penyerahan' => 'nullable|in:belum_diberikan,sudah_diberikan',
         ]);
 
-        // --- VALIDASI STOK PRODUK JADI SEBELUM TRANSAKSI ---
-        $errors = [];
-        foreach ($validated['items'] as $item) {
-            $produk = Produk::findOrFail($item['produk_id']);
-            if ($item['qty'] > $produk->stok) {
-                $errors[] = "Stok produk \"{$produk->nama_produk}\" tidak mencukupi. "
-                    . "Dibutuhkan: {$item['qty']}, "
-                    . "Sisa stok: {$produk->stok}.";
+        if (! empty($validated['pre_order_id'])) {
+            $batch = PreOrder::find($validated['pre_order_id']);
+            if (! $batch || $batch->status !== 'buka') {
+                return back()->withErrors(['pre_order_id' => 'Batch pre-order sudah ditutup. Pilih batch yang masih aktif.'])->withInput();
             }
         }
-        if (!empty($errors)) {
-            return back()->withErrors(['items' => $errors])->withInput();
-        }
-        // ---------------------------------------------------
 
         DB::transaction(function () use ($validated) {
-            $totalSales = collect($validated['items'])->sum(function ($item) {
-                return $item['qty'] * $item['harga_satuan'];
-            });
+            $totalSales = collect($validated['items'])->sum(fn ($item) => $item['qty'] * $item['harga_satuan']);
 
-            // Auto-generate invoice number if empty
-            $noFaktur = $validated['no_faktur'];
+            $noFaktur = $validated['no_faktur'] ?? null;
             if (empty($noFaktur)) {
                 $last = Penjualan::orderBy('id', 'desc')->first();
                 $nextId = $last ? $last->id + 1 : 1;
-                $noFaktur = 'INV-' . str_pad($nextId, 5, '0', STR_PAD_LEFT);
+                $noFaktur = 'PO-'.str_pad($nextId, 5, '0', STR_PAD_LEFT);
             }
 
-            // 1. Simpan Header Penjualan
+            $statusPembayaran = $validated['status_pembayaran'] ?? 'sudah_bayar';
+            $statusPenyerahan = $validated['status_penyerahan'] ?? 'belum_diberikan';
+
             $penjualan = Penjualan::create([
                 'pelanggan_id' => $validated['pelanggan_id'],
                 'metode_pembayaran_id' => $validated['metode_pembayaran_id'],
+                'pre_order_id' => $validated['pre_order_id'] ?? null,
                 'no_faktur' => $noFaktur,
                 'total' => $totalSales,
+                'status' => $statusPenyerahan === 'sudah_diberikan' ? 'selesai' : 'pre_order',
+                'status_pembayaran' => $statusPembayaran,
+                'status_penyerahan' => $statusPenyerahan,
+                'tanggal_bayar' => $statusPembayaran === 'sudah_bayar' ? now() : null,
+                'tanggal_diberikan' => $statusPenyerahan === 'sudah_diberikan' ? now() : null,
             ]);
 
-            // 2. Looping Items (Detail Penjualan & Stok)
             foreach ($validated['items'] as $item) {
-                $produk = Produk::findOrFail($item['produk_id']);
-
                 $penjualan->detailPenjualans()->create([
                     'produk_id' => $item['produk_id'],
                     'qty' => $item['qty'],
                     'harga_satuan' => $item['harga_satuan'],
                     'subtotal' => $item['qty'] * $item['harga_satuan'],
                 ]);
-
-                // Kurangi stok produk jadi
-                $produk->decrement('stok', $item['qty']);
             }
 
-            // 3. Evaluasi Jenis Pembayaran
-            if ($validated['jenis_pembayaran'] === 'Tunai') {
-                $penjualan->kas()->create([
-                    'tanggal' => now()->toDateString(),
-                    'keterangan' => 'Penjualan Tunai: ' . $noFaktur,
-                    'masuk' => $totalSales,
-                    'keluar' => 0,
-                    'sumber' => 'penjualan'
-                ]);
-            } else {
-                $penjualan->piutang()->create([
-                    'nominal' => $totalSales,
-                    'status' => 'belum_lunas',
-                    'tgl_jatuh_tempo' => $validated['tgl_jatuh_tempo'],
-                ]);
+            if ($statusPembayaran === 'sudah_bayar') {
+                $penjualan->kas()->updateOrCreate(
+                    ['kasable_type' => Penjualan::class, 'kasable_id' => $penjualan->id],
+                    [
+                        'tanggal' => now()->toDateString(),
+                        'keterangan' => 'Pembayaran pre-order: '.$noFaktur,
+                        'masuk' => $totalSales,
+                        'keluar' => 0,
+                        'sumber' => 'penjualan',
+                    ]
+                );
+            } elseif ($penjualan->kas) {
+                $penjualan->kas->delete();
             }
         });
 
-        return redirect()->route('sales.index')->with('success', 'Transaksi Penjualan Berhasil Dicatat.');
+        return redirect()->route('sales.index')->with('success', 'Pesanan pre-order berhasil dicatat.');
+    }
+
+    public function fulfill(Penjualan $sale)
+    {
+        if ($sale->status === 'selesai' && $sale->status_penyerahan === 'sudah_diberikan') {
+            return back()->with('error', 'Pre-order ini sudah diselesaikan.');
+        }
+
+        $sale->load('detailPenjualans.produk');
+
+        $errors = [];
+        foreach ($sale->detailPenjualans as $detail) {
+            $produk = $detail->produk;
+            if ($produk && $detail->qty > $produk->stok && $sale->status !== 'selesai') {
+                $errors[] = "Stok \"{$produk->nama_produk}\" belum cukup. Dibutuhkan {$detail->qty}, stok jadi {$produk->stok}. Produksi dulu sesuai pesanan.";
+            }
+        }
+
+        if ($errors !== []) {
+            return back()->withErrors(['items' => $errors])->with('error', $errors[0]);
+        }
+
+        DB::transaction(function () use ($sale) {
+            foreach ($sale->detailPenjualans as $detail) {
+                if ($detail->produk && $sale->status !== 'selesai') {
+                    $detail->produk->decrement('stok', $detail->qty);
+                }
+            }
+
+            $sale->update([
+                'status' => 'selesai',
+                'status_penyerahan' => 'sudah_diberikan',
+                'tanggal_diberikan' => now(),
+            ]);
+        });
+
+        return back()->with('success', 'Pre-order diserahkan ke pembeli.');
+    }
+
+    public function updateStatus(Request $request, Penjualan $sale)
+    {
+        $validated = $request->validate([
+            'status_pembayaran' => 'required|in:belum_bayar,sudah_bayar',
+            'status_penyerahan' => 'required|in:belum_diberikan,sudah_diberikan',
+        ]);
+
+        DB::transaction(function () use ($validated, $sale) {
+            $data = $validated;
+
+            if ($validated['status_pembayaran'] === 'sudah_bayar' && ! $sale->tanggal_bayar) {
+                $data['tanggal_bayar'] = now();
+            } elseif ($validated['status_pembayaran'] === 'belum_bayar') {
+                $data['tanggal_bayar'] = null;
+            }
+
+            if ($validated['status_penyerahan'] === 'sudah_diberikan' && ! $sale->tanggal_diberikan) {
+                $data['tanggal_diberikan'] = now();
+                if ($sale->status !== 'selesai') {
+                    $sale->load('detailPenjualans.produk');
+                    foreach ($sale->detailPenjualans as $detail) {
+                        if ($detail->produk) {
+                            $detail->produk->decrement('stok', $detail->qty);
+                        }
+                    }
+                    $data['status'] = 'selesai';
+                }
+            } elseif ($validated['status_penyerahan'] === 'belum_diberikan') {
+                $data['tanggal_diberikan'] = null;
+                if ($sale->status === 'selesai') {
+                    $data['status'] = 'pre_order';
+                }
+            }
+
+            $sale->update($data);
+
+            if ($validated['status_pembayaran'] === 'sudah_bayar') {
+                $sale->kas()->updateOrCreate(
+                    ['kasable_type' => Penjualan::class, 'kasable_id' => $sale->id],
+                    [
+                        'tanggal' => now()->toDateString(),
+                        'keterangan' => 'Pembayaran pre-order: '.$sale->no_faktur,
+                        'masuk' => $sale->total,
+                        'keluar' => 0,
+                        'sumber' => 'penjualan',
+                    ]
+                );
+            } elseif ($sale->kas) {
+                $sale->kas->delete();
+            }
+        });
+
+        return back()->with('success', 'Status pesanan diperbarui.');
     }
 
     public function destroy(Penjualan $sale)
     {
         DB::transaction(function () use ($sale) {
-            // Revert stok produk jadi
-            foreach ($sale->detailPenjualans as $detail) {
-                $detail->produk->increment('stok', $detail->qty);
+            if ($sale->status === 'selesai') {
+                $sale->load('detailPenjualans.produk');
+                foreach ($sale->detailPenjualans as $detail) {
+                    if ($detail->produk) {
+                        $detail->produk->increment('stok', $detail->qty);
+                    }
+                }
             }
 
-            // Delete Penjualan (Eloquent booted deleted event will delete Kas record; cascade deletes take care of details & piutang)
+            if ($sale->kas) {
+                $sale->kas->delete();
+            }
+
             $sale->delete();
         });
 
-        return redirect()->route('sales.index')->with('success', 'Transaksi Penjualan berhasil dihapus dan stok telah dikembalikan.');
+        return redirect()->route('sales.index')->with('success', 'Pre-order dihapus.');
     }
 }

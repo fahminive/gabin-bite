@@ -19,6 +19,7 @@ interface Props {
         kode: string
         nama_pelanggan: string
         no_telepon: string | null
+        alamat?: string | null
     }
     defaultKode?: string
 }
@@ -34,6 +35,7 @@ export function PelangganForm({
         kode: pelanggan?.kode ?? defaultKode ?? "",
         nama_pelanggan: pelanggan?.nama_pelanggan ?? "",
         no_telepon: pelanggan?.no_telepon ?? "",
+        alamat: pelanggan?.alamat ?? "",
     })
 
     function submit(
@@ -128,6 +130,30 @@ export function PelangganForm({
                         {form.errors.no_telepon && (
                             <FieldError>
                                 {form.errors.no_telepon}
+                            </FieldError>
+                        )}
+                    </Field>
+
+                    <Field>
+                        <FieldLabel htmlFor="alamat">
+                            Alamat (opsional)
+                        </FieldLabel>
+
+                        <Input
+                            id="alamat"
+                            placeholder="Contoh: Jl. Merdeka No. 1"
+                            value={form.data.alamat}
+                            onChange={(e) =>
+                                form.setData(
+                                    "alamat",
+                                    e.target.value
+                                )
+                            }
+                        />
+
+                        {form.errors.alamat && (
+                            <FieldError>
+                                {form.errors.alamat}
                             </FieldError>
                         )}
                     </Field>

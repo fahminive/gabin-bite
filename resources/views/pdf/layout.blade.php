@@ -123,10 +123,10 @@
     <table class="header-table">
         <tr>
             <td class="header-text">
-                <div class="company-name">CV. ELFATH MAKARONI KEJU</div>
+                <div class="company-name">GABINBITE.PWT</div>
                 <div class="company-details">
-                    Jl. Pemuda No. 123, Purwokerto, Banyumas, Jawa Tengah 53124<br>
-                    Email: finance@makaronikeju.com | Telp: 0812-3456-7890
+                    Gabin Es Krim &middot; Jl. Pemuda No. 123, Purwokerto, Banyumas, Jawa Tengah 53124<br>
+                    Email: halo@gabinbite.pwt | Telp: 0812-3456-7890
                 </div>
             </td>
         </tr>
@@ -139,7 +139,7 @@
     @yield('content')
 
     <div class="footer">
-        Dicetak otomatis oleh Sistem Keuangan SIKEJU pada {{ date('d-m-Y H:i:s') }}
+        Dicetak otomatis oleh gabinbite.pwt pada {{ date('d-m-Y H:i:s') }} &middot; gabin renyah, buku rapi
     </div>
 </body>
 </html>

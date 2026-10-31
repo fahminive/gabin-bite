@@ -2,22 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Kas;
-use App\Models\Penjualan;
-use App\Models\PengeluaranOperasional;
 use App\Models\BahanBaku;
-use App\Models\Produk;
-use App\Models\Peralatan;
 use App\Models\Hutang;
-use App\Models\Piutang;
+use App\Models\Kas;
 use App\Models\Modal;
-use App\Models\PembayaranHutang;
-use App\Models\PembayaranPiutang;
+use App\Models\Mitra;
+use App\Models\PengeluaranOperasional;
+use App\Models\Penjualan;
+use App\Models\Peralatan;
+use App\Models\Produk;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 use Inertia\Inertia;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class LaporanController extends Controller
 {
@@ -31,34 +29,95 @@ class LaporanController extends Controller
                 $tglBeli = Carbon::parse($alat->tgl_beli);
                 $targetDate = Carbon::parse($date);
                 $months = $tglBeli->diffInMonths($targetDate);
-                
+
                 if ($months > 0) {
                     // Capping at 100% depreciation
                     $maxMonths = floor(100 / $alat->persentase_penyusutan);
                     if ($months > $maxMonths) {
                         $months = $maxMonths;
                     }
-                    
+
                     $depreciation = $alat->harga_perolehan * ($alat->persentase_penyusutan / 100) * $months;
                     $totalDepreciation += $depreciation;
                 }
             }
         }
+
         return $totalDepreciation;
+    }
+
+    /**
+     * Rentang tanggal default mengikuti data yang tersedia (min dan max tanggal
+     * transaksi) sehingga laporan tidak menampilkan 0 meskipun data tidak ada
+     * pada bulan ini. Jika keduanya sudah diisi oleh request, gunakan langsung.
+     */
+    private function resolveDefaultDateRange(Request $request): array
+    {
+        $start = $request->input('start_date');
+        $end = $request->input('end_date');
+
+        if ($start && $end) {
+            return [$start, $end];
+        }
+
+        $bounds = [];
+        foreach ([
+            Kas::selectRaw('MIN(COALESCE(tanggal, DATE(created_at))) as mn, MAX(COALESCE(tanggal, DATE(created_at))) as mx')->first(),
+            Penjualan::selectRaw('MIN(DATE(created_at)) as mn, MAX(DATE(created_at)) as mx')->first(),
+            PengeluaranOperasional::selectRaw('MIN(tanggal) as mn, MAX(tanggal) as mx')->first(),
+        ] as $row) {
+            if ($row && $row->mn) {
+                $bounds[] = $row->mn;
+                $bounds[] = $row->mx;
+            }
+        }
+
+        $now = Carbon::now();
+        $defaultStart = $now->startOfMonth()->toDateString();
+        $defaultEnd = $now->endOfMonth()->toDateString();
+
+        if (! empty($bounds)) {
+            $defaultStart = min($bounds);
+            $defaultEnd = max($bounds);
+        }
+
+        return [
+            $start ?? $defaultStart,
+            $end ?? $defaultEnd,
+        ];
+    }
+
+    /**
+     * Beberapa baris kas di Supabase memiliki `tanggal = NULL` (disimpan tanpa
+     * tanggal saat seeding/import awal), sehingga filter langsung pada kolom
+     * `tanggal` akan mengembalikan nol. Fallback ke `DATE(created_at)` agar
+     * transaksi tetap terhitung dalam laporan.
+     */
+    private function applyKasBefore($query, string $date)
+    {
+        return $query->whereRaw('(tanggal IS NOT NULL AND tanggal < ?) OR (tanggal IS NULL AND DATE(created_at) < ?)', [$date, $date]);
+    }
+
+    private function applyKasBetween($query, string $start, string $end)
+    {
+        return $query->whereRaw('(tanggal IS NOT NULL AND tanggal BETWEEN ? AND ?) OR (tanggal IS NULL AND DATE(created_at) BETWEEN ? AND ?)', [$start, $end, $start, $end]);
+    }
+
+    private function applyKasOnOrBefore($query, string $date)
+    {
+        return $query->whereRaw('(tanggal IS NOT NULL AND tanggal <= ?) OR (tanggal IS NULL AND DATE(created_at) <= ?)', [$date, $date]);
     }
 
     private function getCashFlowData(Request $request)
     {
-        $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
-        $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->toDateString());
+        [$startDate, $endDate] = $this->resolveDefaultDateRange($request);
 
         // 1. Saldo Awal Kas
-        $saldoAwal = Kas::where('tanggal', '<', $startDate)->sum('masuk') 
-            - Kas::where('tanggal', '<', $startDate)->sum('keluar');
+        $saldoAwal = $this->applyKasBefore(Kas::where('masuk', '>', 0), $startDate)->sum('masuk')
+            - $this->applyKasBefore(Kas::where('keluar', '>', 0), $startDate)->sum('keluar');
 
         // 2. Arus Kas Masuk
-        $inflows = Kas::whereBetween('tanggal', [$startDate, $endDate])
-            ->where('masuk', '>', 0)
+        $inflows = $this->applyKasBetween(Kas::where('masuk', '>', 0), $startDate, $endDate)
             ->selectRaw('sumber, SUM(masuk) as total')
             ->groupBy('sumber')
             ->get()
@@ -66,8 +125,7 @@ class LaporanController extends Controller
             ->toArray();
 
         // 3. Arus Kas Keluar
-        $outflows = Kas::whereBetween('tanggal', [$startDate, $endDate])
-            ->where('keluar', '>', 0)
+        $outflows = $this->applyKasBetween(Kas::where('keluar', '>', 0), $startDate, $endDate)
             ->selectRaw('sumber, SUM(keluar) as total')
             ->groupBy('sumber')
             ->get()
@@ -81,7 +139,7 @@ class LaporanController extends Controller
         $formattedInflows = [];
         $totalInflow = 0;
         foreach ($sourcesIn as $src) {
-            $val = (float)($inflows[$src] ?? 0);
+            $val = (float) ($inflows[$src] ?? 0);
             $formattedInflows[$src] = $val;
             $totalInflow += $val;
         }
@@ -89,7 +147,7 @@ class LaporanController extends Controller
         $formattedOutflows = [];
         $totalOutflow = 0;
         foreach ($sourcesOut as $src) {
-            $val = (float)($outflows[$src] ?? 0);
+            $val = (float) ($outflows[$src] ?? 0);
             $formattedOutflows[$src] = $val;
             $totalOutflow += $val;
         }
@@ -117,13 +175,13 @@ class LaporanController extends Controller
     {
         $data = $this->getCashFlowData($request);
         $pdf = Pdf::loadView('pdf.cash-flow', $data);
-        return $pdf->download('Laporan_Arus_Kas_' . $data['startDate'] . '_to_' . $data['endDate'] . '.pdf');
+
+        return $pdf->download('Laporan_Arus_Kas_'.$data['startDate'].'_to_'.$data['endDate'].'.pdf');
     }
 
     private function getIncomeStatementData(Request $request)
     {
-        $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
-        $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->toDateString());
+        [$startDate, $endDate] = $this->resolveDefaultDateRange($request);
 
         // 1. Pendapatan Penjualan
         $pendapatan = (float) Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])->sum('total');
@@ -157,14 +215,23 @@ class LaporanController extends Controller
 
         $operasional = $operasionalKas + $koreksiStokLoss - $koreksiStokGain + $bebanPenyusutan;
 
-        // 5. Laba Bersih Sebelum Pajak
         $labaBersihSebelumPajak = $labaKotor - $operasional;
+        $bebanPajak = 0;
+        $labaBersihSetelahPajak = $labaBersihSebelumPajak;
 
-        // 6. Beban Pajak PPh Final (0.5% dari Omzet/Pendapatan)
-        $bebanPajak = $pendapatan * 0.005;
-
-        // 7. Laba Bersih Setelah Pajak
-        $labaBersihSetelahPajak = $labaBersihSebelumPajak - $bebanPajak;
+        // Pembagian laba bersih per partner (3 orang): masing-masing menerima 1/3.
+        Mitra::ensureTrio();
+        $mitras = Mitra::orderBy('kode')->get();
+        $partnerCount = max($mitras->count(), 1);
+        $labaPerOrang = (float) $labaBersihSetelahPajak / $partnerCount;
+        $profitSharing = $mitras->map(function ($mitra) use ($labaPerOrang) {
+            return [
+                'id' => $mitra->id,
+                'nama' => $mitra->nama,
+                'kode' => $mitra->kode,
+                'share' => $labaPerOrang,
+            ];
+        })->all();
 
         return [
             'startDate' => $startDate,
@@ -182,6 +249,7 @@ class LaporanController extends Controller
             'labaBersihSebelumPajak' => $labaBersihSebelumPajak,
             'bebanPajak' => $bebanPajak,
             'labaBersih' => $labaBersihSetelahPajak,
+            'profitSharing' => $profitSharing,
         ];
     }
 
@@ -194,26 +262,37 @@ class LaporanController extends Controller
     {
         $data = $this->getIncomeStatementData($request);
         $pdf = Pdf::loadView('pdf.income-statement', $data);
-        return $pdf->download('Laporan_Laba_Rugi_' . $data['startDate'] . '_to_' . $data['endDate'] . '.pdf');
+
+        return $pdf->download('Laporan_Laba_Rugi_'.$data['startDate'].'_to_'.$data['endDate'].'.pdf');
     }
 
     private function getBalanceSheetData(Request $request)
     {
-        $date = $request->input('date', Carbon::now()->toDateString());
+        $bounds = [];
+        foreach ([
+            Kas::selectRaw('MAX(COALESCE(tanggal, DATE(created_at))) as mx')->first(),
+            Penjualan::selectRaw('MAX(DATE(created_at)) as mx')->first(),
+            PengeluaranOperasional::selectRaw('MAX(tanggal) as mx')->first(),
+        ] as $row) {
+            if ($row && $row->mx) {
+                $bounds[] = $row->mx;
+            }
+        }
+        $defaultDate = ! empty($bounds) ? max($bounds) : Carbon::now()->toDateString();
+
+        $date = $request->input('date', $defaultDate);
 
         // 1. ASET (HARTA)
         // a. Aset Lancar
-        $kas = (float) (Kas::where('tanggal', '<=', $date)->sum('masuk') 
-            - Kas::where('tanggal', '<=', $date)->sum('keluar'));
+        $kas = (float) ($this->applyKasOnOrBefore(Kas::where('masuk', '>', 0), $date)->sum('masuk')
+            - $this->applyKasOnOrBefore(Kas::where('keluar', '>', 0), $date)->sum('keluar'));
 
-        $totalPiutang = Piutang::where(DB::raw('DATE(created_at)'), '<=', $date)->sum('nominal');
-        $totalPembayaranPiutang = PembayaranPiutang::where('tanggal', '<=', $date)->sum('nominal_bayar');
-        $piutang = (float) ($totalPiutang - $totalPembayaranPiutang);
+        $piutang = 0.0;
 
         $persediaanBahan = (float) BahanBaku::sum(DB::raw('stok * harga_satuan'));
         $persediaanProduk = (float) Produk::sum(DB::raw('stok * hpp'));
 
-        $totalAsetLancar = $kas + $piutang + $persediaanBahan + $persediaanProduk;
+        $totalAsetLancar = $kas + $persediaanBahan + $persediaanProduk;
 
         // b. Aset Tetap
         $peralatanAwal = (float) Peralatan::where('tgl_beli', '<=', $date)->sum('harga_perolehan');
@@ -223,24 +302,9 @@ class LaporanController extends Controller
         $totalAset = $totalAsetLancar + $peralatan;
 
         // 2. KEWAJIBAN (HUTANG)
-        $totalHutang = Hutang::where(DB::raw('DATE(created_at)'), '<=', $date)->sum('nominal');
-        $totalPembayaranHutang = PembayaranHutang::where('tanggal', '<=', $date)->sum('nominal_bayar');
-        $hutangDagang = (float) ($totalHutang - $totalPembayaranHutang);
-
-        // Hitung Hutang Pajak
-        $pendapatanPajak = Penjualan::where(DB::raw('DATE(created_at)'), '<=', $date)->sum('total');
-        $kewajibanPajakKumulatif = $pendapatanPajak * 0.005;
-        
-        $pajakTerbayar = PengeluaranOperasional::where('tanggal', '<=', $date)
-            ->where(function ($query) {
-                $query->where('kategori', 'Pajak')
-                    ->orWhere('keterangan', 'LIKE', '%pajak%');
-            })->sum('nominal');
-
-        $hutangPajak = (float) ($kewajibanPajakKumulatif - $pajakTerbayar);
-        if ($hutangPajak < 0) $hutangPajak = 0; // Jika bayar lebih, dianggap 0 untuk hutang
-
-        $hutang = $hutangDagang + $hutangPajak;
+        $hutangDagang = 0.0;
+        $hutangPajak = 0.0;
+        $hutang = 0.0;
 
         // 3. EKUITAS (MODAL)
         $modalKas = (float) Modal::where(DB::raw('DATE(created_at)'), '<=', $date)->sum('nominal');
@@ -254,7 +318,7 @@ class LaporanController extends Controller
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
             ->where(DB::raw('DATE(penjualans.created_at)'), '<=', $date)
             ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
-        
+
         $operasionalKasKumulatif = PengeluaranOperasional::where('tanggal', '<=', $date)->sum('nominal');
 
         $koreksiStokLossKumulatif = (float) DB::table('koreksi_stoks')
@@ -270,8 +334,8 @@ class LaporanController extends Controller
             ->sum(DB::raw('koreksi_stoks.qty * produks.hpp'));
 
         $operasionalKumulatif = $operasionalKasKumulatif + $koreksiStokLossKumulatif - $koreksiStokGainKumulatif + $akumulasiPenyusutan;
-        
-        $labaDitahan = (float) ($pendapatanKumulatif - $hppKumulatif - $operasionalKumulatif - $hutangPajak);
+
+        $labaDitahan = (float) ($pendapatanKumulatif - $hppKumulatif - $operasionalKumulatif);
 
         $totalEkuitas = $modal + $labaDitahan;
         $totalKewajibanDanEkuitas = $hutang + $totalEkuitas;
@@ -311,121 +375,7 @@ class LaporanController extends Controller
     {
         $data = $this->getBalanceSheetData($request);
         $pdf = Pdf::loadView('pdf.balance-sheet', $data);
-        return $pdf->download('Laporan_Posisi_Keuangan_' . $data['date'] . '.pdf');
-    }
 
-    private function getTaxReportData(Request $request)
-    {
-        $selectedYear = $request->input('year', Carbon::now()->year);
-
-        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
-        $yearSelect = $isSqlite ? "strftime('%Y', created_at)" : "YEAR(created_at)";
-        $monthSelect = $isSqlite ? "cast(strftime('%m', created_at) as integer)" : "MONTH(created_at)";
-        $monthSelectTanggal = $isSqlite ? "cast(strftime('%m', tanggal) as integer)" : "MONTH(tanggal)";
-
-        // Get available tax years dynamically from sales
-        $years = Penjualan::selectRaw("$yearSelect as year")
-            ->groupBy('year')
-            ->orderBy('year', 'desc')
-            ->pluck('year')
-            ->toArray();
-
-        if (empty($years)) {
-            $years = [(int) Carbon::now()->year];
-        } else {
-            $years = array_map('intval', $years);
-        }
-
-        // Ensure selected year is in years list
-        if (!in_array((int)$selectedYear, $years)) {
-            $years[] = (int)$selectedYear;
-            sort($years);
-            $years = array_reverse($years);
-        }
-
-        // Monthly sales aggregation for selected year
-        $monthlySales = Penjualan::selectRaw("$monthSelect as month, SUM(total) as omzet")
-            ->whereYear('created_at', $selectedYear)
-            ->groupBy(DB::raw($monthSelect))
-            ->pluck('omzet', 'month')
-            ->toArray();
-
-        // Monthly paid tax aggregation from pengeluaran_operasionals (kategori = 'Pajak' or keterangan contains 'pajak')
-        $paidTaxes = PengeluaranOperasional::whereYear('tanggal', $selectedYear)
-            ->where(function ($query) {
-                $query->where('kategori', 'Pajak')
-                    ->orWhere('keterangan', 'LIKE', '%pajak%');
-            })
-            ->selectRaw("$monthSelectTanggal as month, SUM(nominal) as total")
-            ->groupBy(DB::raw($monthSelectTanggal))
-            ->pluck('total', 'month')
-            ->toArray();
-
-        $months = [
-            1 => 'Januari',
-            2 => 'Februari',
-            3 => 'Maret',
-            4 => 'April',
-            5 => 'Mei',
-            6 => 'Juni',
-            7 => 'Juli',
-            8 => 'Agustus',
-            9 => 'September',
-            10 => 'Oktober',
-            11 => 'November',
-            12 => 'Desember'
-        ];
-
-        $yearlyTotalOmzet = 0;
-        $yearlyTotalTax = 0;
-        $yearlyTotalPaidTax = 0;
-        $monthlyData = [];
-
-        foreach ($months as $num => $name) {
-            $omzet = (float) ($monthlySales[$num] ?? 0);
-            $tax = $omzet * 0.005; // PPh Final 0.5%
-            $paid = (float) ($paidTaxes[$num] ?? 0);
-
-            $yearlyTotalOmzet += $omzet;
-            $yearlyTotalTax += $tax;
-            $yearlyTotalPaidTax += $paid;
-
-            // Due date: 15th of the following month
-            $nextMonthNum = $num === 12 ? 1 : $num + 1;
-            $nextMonthYear = $num === 12 ? $selectedYear + 1 : $selectedYear;
-            $nextMonthName = $months[$nextMonthNum];
-            $dueDate = "15 " . $nextMonthName . " " . $nextMonthYear;
-
-            $monthlyData[] = [
-                'month_number' => $num,
-                'month_name' => $name,
-                'omzet' => $omzet,
-                'tax' => $tax,
-                'paid' => $paid,
-                'due_date' => $dueDate,
-            ];
-        }
-
-        return [
-            'selectedYear' => (int) $selectedYear,
-            'years' => $years,
-            'yearlyTotalOmzet' => $yearlyTotalOmzet,
-            'yearlyTotalTax' => $yearlyTotalTax,
-            'yearlyTotalPaidTax' => $yearlyTotalPaidTax,
-            'monthlyData' => $monthlyData,
-        ];
-    }
-
-    public function taxReport(Request $request)
-    {
-        return Inertia::render('Reports/TaxReport', $this->getTaxReportData($request));
-    }
-
-    public function taxReportPdf(Request $request)
-    {
-        $data = $this->getTaxReportData($request);
-        $pdf = Pdf::loadView('pdf.tax-report', $data);
-        return $pdf->download('Laporan_Pajak_PPh_Final_' . $data['selectedYear'] . '.pdf');
+        return $pdf->download('Laporan_Posisi_Keuangan_'.$data['date'].'.pdf');
     }
 }
-

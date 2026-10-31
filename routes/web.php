@@ -12,11 +12,11 @@ use App\Http\Controllers\ModalController;
 use App\Http\Controllers\PengeluaranOperasionalController;
 use App\Http\Controllers\KasController;
 use App\Http\Controllers\PembelianController;
-use App\Http\Controllers\HutangController;
 use App\Http\Controllers\ProduksiController;
 use App\Http\Controllers\KoreksiStokController;
 use App\Http\Controllers\PenjualanController;
-use App\Http\Controllers\PiutangController;
+use App\Http\Controllers\PreOrderController;
+use App\Http\Controllers\SplitBillController;
 use App\Http\Controllers\LaporanController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserController;
@@ -33,11 +33,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports/income-statement/pdf', [LaporanController::class, 'incomeStatementPdf'])->name('reports.income-statement.pdf');
     Route::get('reports/balance-sheet', [LaporanController::class, 'balanceSheet'])->name('reports.balance-sheet');
     Route::get('reports/balance-sheet/pdf', [LaporanController::class, 'balanceSheetPdf'])->name('reports.balance-sheet.pdf');
-    Route::get('reports/tax', [LaporanController::class, 'taxReport'])->name('reports.tax');
-    Route::get('reports/tax/pdf', [LaporanController::class, 'taxReportPdf'])->name('reports.tax.pdf');
 
     // Route Write
-    Route::middleware(['role:admin,finance'])->group(function () {
+    Route::middleware(['role:admin,finance,owner'])->group(function () {
         // Master Data
         Route::resource('materials', BahanBakuController::class)->except(['index', 'show']);
         Route::resource('products', ProdukController::class)->except(['index', 'show']);
@@ -51,11 +49,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Transaksi
         Route::resource('purchases', PembelianController::class)->except(['index', 'show']);
-        Route::post('payables/{hutang}/pay', [HutangController::class, 'bayarCicilan'])->name('payables.pay');
+        Route::resource('pre-orders', PreOrderController::class)->except(['index', 'show']);
         Route::resource('productions', ProduksiController::class)->except(['index', 'show']);
         Route::resource('stock-corrections', KoreksiStokController::class)->except(['index', 'show']);
         Route::resource('sales', PenjualanController::class)->except(['index', 'show']);
-        Route::post('receivables/{piutang}/pay', [PiutangController::class, 'bayarCicilan'])->name('receivables.pay');
+        Route::post('sales/{sale}/fulfill', [PenjualanController::class, 'fulfill'])->name('sales.fulfill');
+        Route::patch('sales/{sale}/status', [PenjualanController::class, 'updateStatus'])->name('sales.status');
+        Route::patch('split-bills/mitras/{mitra}', [SplitBillController::class, 'updateMitra'])->name('split-bills.mitras.update');
+        Route::post('split-bills/transfers', [SplitBillController::class, 'storeTransfer'])->name('split-bills.transfers.store');
+        Route::put('split-bills/transfers/{transfer}', [SplitBillController::class, 'updateTransfer'])->name('split-bills.transfers.update');
+        Route::delete('split-bills/transfers/{transfer}', [SplitBillController::class, 'destroyTransfer'])->name('split-bills.transfers.destroy');
+        Route::post('split-bills/{splitTagihan}/settle', [SplitBillController::class, 'settle'])->name('split-bills.settle');
     });
 
     // Route Read
@@ -72,11 +76,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Transaksi
     Route::resource('purchases', PembelianController::class)->only(['index', 'show']);
-    Route::resource('payables', HutangController::class)->only(['index', 'show']);
+    Route::resource('pre-orders', PreOrderController::class)->only(['index', 'show']);
     Route::resource('productions', ProduksiController::class)->only(['index', 'show']);
     Route::resource('stock-corrections', KoreksiStokController::class)->only(['index', 'show']);
     Route::resource('sales', PenjualanController::class)->only(['index', 'show']);
-    Route::resource('receivables', PiutangController::class)->only(['index', 'show']);
+    Route::get('split-bills', [SplitBillController::class, 'index'])->name('split-bills.index');
 
     Route::middleware(['role:admin'])->group(function () {
         Route::resource('users', UserController::class);

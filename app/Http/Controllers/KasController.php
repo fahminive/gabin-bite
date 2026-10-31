@@ -4,15 +4,35 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Kas\StoreKasRequest;
 use App\Models\Kas;
+use App\Models\Mitra;
+use App\Models\PreOrder;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class KasController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $transactions = Kas::orderBy('tanggal', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $preOrderId = $request->input('pre_order_id');
+
+        $query = Kas::orderBy('tanggal', 'desc')
+            ->orderBy('created_at', 'desc');
+
+        if ($preOrderId) {
+            $query->where(function ($q) use ($preOrderId) {
+                $q->whereHasMorph('kasable', [\App\Models\Penjualan::class], function ($sq) use ($preOrderId) {
+                    $sq->where('pre_order_id', $preOrderId);
+                })
+                ->orWhereHasMorph('kasable', [\App\Models\Pembelian::class], function ($sq) use ($preOrderId) {
+                    $sq->where('pre_order_id', $preOrderId);
+                })
+                ->orWhereHasMorph('kasable', [\App\Models\PengeluaranOperasional::class], function ($sq) use ($preOrderId) {
+                    $sq->where('pre_order_id', $preOrderId);
+                });
+            });
+        }
+
+        $transactions = $query->get();
 
         $totalMasuk = Kas::sum('masuk');
         $totalKeluar = Kas::sum('keluar');
@@ -20,6 +40,9 @@ class KasController extends Controller
 
         return Inertia::render('Kas/Index', [
             'transactions' => $transactions,
+            'mitras' => Mitra::orderBy('kode')->get(),
+            'batches' => PreOrder::orderByDesc('created_at')->get(),
+            'filters' => ['pre_order_id' => $preOrderId],
             'metrics' => [
                 'totalMasuk' => $totalMasuk,
                 'totalKeluar' => $totalKeluar,
@@ -52,6 +75,8 @@ class KasController extends Controller
             'masuk' => $masuk,
             'keluar' => $keluar,
             'sumber' => 'lainnya',
+            'sumber_dana' => $data['sumber_dana'] ?? null,
+            'mitra_id' => $data['sumber_dana'] === 'pribadi' ? ($data['mitra_id'] ?? null) : null,
             'kasable_id' => null,
             'kasable_type' => null,
         ]);

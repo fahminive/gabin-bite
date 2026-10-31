@@ -33,4 +33,9 @@ class User extends Authenticatable implements PasskeyUser
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
+
+    public function mitra()
+    {
+        return $this->hasOne(Mitra::class);
+    }
 }
