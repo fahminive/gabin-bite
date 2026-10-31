@@ -53,7 +53,8 @@ RUN mkdir -p \
     && npm run build \
     && composer dump-autoload --no-dev --classmap-authoritative --no-interaction \
     && php artisan event:cache \
-    && php artisan view:cache
+    && php artisan view:cache \
+    && php artisan migrate --force
 
 FROM base AS runtime
 
