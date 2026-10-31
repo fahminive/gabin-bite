@@ -51,71 +51,51 @@ class DashboardController extends Controller
         $startDateObj = Carbon::parse($startDate);
         $endDateObj = Carbon::parse($endDate);
 
-        // ====================================================================
-        // HELPER: beberapa baris kas di Supabase memiliki tanggal = NULL.
-        // Fallback ke DATE(created_at) agar data tetap terhitung.
-        // ====================================================================
-        $kasTanggalExpr = "(COALESCE(\"tanggal\", DATE(\"created_at\")))";
-        $kasWhereRange = "{$kasTanggalExpr} BETWEEN ? AND ?";
-        $kasWhereOnOrBefore = "{$kasTanggalExpr} <= ?";
+        // 1. Saldo Kas Akhir Periode
+        $saldoKas = (float) (Kas::where('tanggal', '<=', $endDate)->sum('masuk')
+            - Kas::where('tanggal', '<=', $endDate)->sum('keluar'));
 
-        // 1. Saldo Kas Akhir Periode (1 query, conditional aggregation)
-        $kasAgregat = Kas::whereRaw($kasWhereRange, [$startDate, $endDate])
-            ->selectRaw(
-                "SUM(CASE WHEN \"masuk\" > 0 THEN \"masuk\" ELSE 0 END) as total_masuk,
-                 SUM(CASE WHEN \"keluar\" > 0 THEN \"keluar\" ELSE 0 END) as total_keluar"
-            )
-            ->first();
-
-        $totalInflow = (float) ($kasAgregat->total_masuk ?? 0);
-        $totalOutflow = (float) ($kasAgregat->total_keluar ?? 0);
-        $netCashFlow = $totalInflow - $totalOutflow;
-
-        // Saldo kas sampai akhir periode (untuk neraca mini)
-        $kasSaldoAkhir = Kas::whereRaw($kasWhereOnOrBefore, [$endDate])
-            ->selectRaw(
-                "SUM(CASE WHEN \"masuk\" > 0 THEN \"masuk\" ELSE 0 END) -
-                 SUM(CASE WHEN \"keluar\" > 0 THEN \"keluar\" ELSE 0 END) as saldo"
-            )
-            ->value('saldo') ?? 0.0;
-        $saldoKas = (float) $kasSaldoAkhir;
-
-        // Build query scope untuk transaksi dalam rentang tanggal
-        $dateRangeWhere = [DB::raw("DATE(\"created_at\") BETWEEN ? AND ?"), $startDate, $endDate];
-        $dateRangeOnOrBefore = [DB::raw("DATE(\"created_at\") <= ?"), $endDate];
+        // Build filters
+        $penjualanQuery = Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        $pembelianQuery = Pembelian::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        $operasionalQuery = PengeluaranOperasional::whereBetween('tanggal', [$startDate, $endDate]);
 
         if ($preOrderId) {
-            $dateRangeWhere[0] .= " AND \"pre_order_id\" = ?";
-            $dateRangeWhere[] = $preOrderId;
+            $penjualanQuery->where('pre_order_id', $preOrderId);
+            $pembelianQuery->where('pre_order_id', $preOrderId);
+            $operasionalQuery->where('pre_order_id', $preOrderId);
         }
 
-        // 2. Pendapatan, HPP, Operasional, Pembelian
-        $pendapatan = (float) Penjualan::where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
-            ->sum('total');
+        // 2. Pendapatan, HPP, Operasional, Laba Bersih
+        $pendapatan = (float) $penjualanQuery->clone()->sum('total');
 
-        $hpp = (float) DB::table('detail_penjualans')
+        $hppQuery = DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
-            ->where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
-            ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
+            ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate]);
+        if ($preOrderId) {
+            $hppQuery->where('penjualans.pre_order_id', $preOrderId);
+        }
+        $hpp = (float) $hppQuery->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
 
         $labaKotor = $pendapatan - $hpp;
 
-        $operasional = (float) PengeluaranOperasional::where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
-            ->sum('nominal');
-
-        $pembelianBahan = (float) Pembelian::where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
-            ->sum('total');
+        $operasional = (float) $operasionalQuery->clone()->sum('nominal');
+        $pembelianBahan = (float) $pembelianQuery->clone()->sum('total');
 
         $labaBersih = $labaKotor - $operasional;
 
         $preOrderAktif = (float) Penjualan::where('status', '!=', 'selesai')
-            ->where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
+            ->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
             ->sum('total');
 
-        // 3. Tren Pendapatan Harian (Line Chart) — 1 query SQL langsung
-        $dailyRevenueRaw = Penjualan::where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
-            ->select(DB::raw('DATE("created_at") as date'), DB::raw('SUM(total) as total'))
+        // 5. Tren Pendapatan Harian (Daily Line Chart)
+        $dailyRevenueQuery = Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        if ($preOrderId) {
+            $dailyRevenueQuery->where('pre_order_id', $preOrderId);
+        }
+        $dailyRevenueRaw = $dailyRevenueQuery
+            ->select(DB::raw('DATE(created_at) as date'), DB::raw('SUM(total) as total'))
             ->groupBy('date')
             ->pluck('total', 'date')
             ->toArray();
@@ -129,11 +109,9 @@ class DashboardController extends Controller
             ];
         }
 
-        // 4. Grafik Arus Kas Harian (Double-Sided Bar Chart) — 1 query SQL langsung
-        $dailyCashRaw = Kas::whereRaw($kasWhereRange, [$startDate, $endDate])
-            ->select($kasTanggalExpr . ' as tanggal',
-                DB::raw('SUM(CASE WHEN "masuk" > 0 THEN "masuk" ELSE 0 END) as total_masuk'),
-                DB::raw('SUM(CASE WHEN "keluar" > 0 THEN "keluar" ELSE 0 END) as total_keluar'))
+        // 6. Grafik Arus Kas Harian (Double-Sided Bar Chart)
+        $dailyCashRaw = Kas::whereBetween('tanggal', [$startDate, $endDate])
+            ->select('tanggal', DB::raw('SUM(masuk) as total_masuk'), DB::raw('SUM(keluar) as total_keluar'))
             ->groupBy('tanggal')
             ->get()
             ->keyBy('tanggal')
@@ -153,10 +131,10 @@ class DashboardController extends Controller
             ];
         }
 
-        // 5. Pengeluaran Terbesar (Outflow Categories) — 1 query
-        $outflowBreakdown = Kas::whereRaw($kasWhereRange, [$startDate, $endDate])
+        // 7. Pengeluaran Terbesar (Outflow Categories)
+        $outflowBreakdown = Kas::whereBetween('tanggal', [$startDate, $endDate])
             ->where('keluar', '>', 0)
-            ->selectRaw('"sumber", SUM("keluar") as total')
+            ->selectRaw('sumber, SUM(keluar) as total')
             ->groupBy('sumber')
             ->get()
             ->map(function ($item) {
@@ -175,13 +153,18 @@ class DashboardController extends Controller
             ->values()
             ->toArray();
 
+        // 8. Perbandingan Kas (Inflow, Outflow, Sisa)
+        $totalInflow = (float) Kas::whereBetween('tanggal', [$startDate, $endDate])->sum('masuk');
+        $totalOutflow = (float) Kas::whereBetween('tanggal', [$startDate, $endDate])->sum('keluar');
+        $netCashFlow = $totalInflow - $totalOutflow;
+
         $cashFlowComparison = [
             ['name' => 'Pendapatan', 'value' => $totalInflow],
             ['name' => 'Pengeluaran', 'value' => $totalOutflow],
             ['name' => 'Sisa', 'value' => max(0, $netCashFlow)],
         ];
 
-        // 6. Efisiensi Manufaktur
+        // 9. Efisiensi Manufaktur (HPP Produk Jadi vs Bahan Baku Dipakai)
         $produksiHpp = (float) DB::table('produksis')
             ->join('produks', 'produksis.produk_id', '=', 'produks.id')
             ->whereBetween('produksis.tanggal', [$startDate, $endDate])
@@ -198,42 +181,37 @@ class DashboardController extends Controller
             'bahanBakuDipakaiCost' => $bahanBakuDipakaiCost,
         ];
 
-        // 7. Neraca Mini (Harta/Aset vs Kewajiban & Ekuitas)
-        $persediaanBahan = (float) BahanBaku::sum(DB::raw('"stok" * "harga_satuan"'));
-        $persediaanProduk = (float) Produk::sum(DB::raw('"stok" * "hpp"'));
-        $totalAsetLancar = $saldoKas + $persediaanBahan + $persediaanProduk;
+        // 10. Neraca Mini (Harta/Aset vs Kewajiban & Ekuitas)
+        $kasNeraca = (float) (Kas::where('tanggal', '<=', $endDate)->sum('masuk')
+            - Kas::where('tanggal', '<=', $endDate)->sum('keluar'));
+        $persediaanBahan = (float) BahanBaku::sum(DB::raw('stok * harga_satuan'));
+        $persediaanProduk = (float) Produk::sum(DB::raw('stok * hpp'));
+        $totalAsetLancar = $kasNeraca + $persediaanBahan + $persediaanProduk;
         $peralatan = (float) Peralatan::where('tgl_beli', '<=', $endDate)->sum('harga_perolehan');
         $totalAset = $totalAsetLancar + $peralatan;
-
-        $modal = (float) Modal::where($dateRangeOnOrBefore[0], ...array_slice($dateRangeOnOrBefore, 1))
-            ->sum('nominal');
-
-        $pendapatanKumulatif = (float) Penjualan::where($dateRangeOnOrBefore[0], ...array_slice($dateRangeOnOrBefore, 1))
-            ->sum('total');
-
-        $hppKumulatif = (float) DB::table('detail_penjualans')
+        $hutang = 0.0;
+        $modal = (float) Modal::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('nominal');
+        $pendapatanKumulatif = Penjualan::where(DB::raw('DATE(created_at)'), '<=', $endDate)->sum('total');
+        $hppKumulatif = DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
-            ->where($dateRangeOnOrBefore[0], ...array_slice($dateRangeOnOrBefore, 1))
+            ->where(DB::raw('DATE(penjualans.created_at)'), '<=', $endDate)
             ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
-
-        $operasionalKumulatif = (float) PengeluaranOperasional::where($dateRangeOnOrBefore[0], ...array_slice($dateRangeOnOrBefore, 1))
-            ->sum('nominal');
-
+        $operasionalKumulatif = PengeluaranOperasional::where('tanggal', '<=', $endDate)->sum('nominal');
         $labaDitahan = (float) ($pendapatanKumulatif - $hppKumulatif - $operasionalKumulatif);
         $totalEkuitas = $modal + $labaDitahan;
 
         $miniBalanceSheet = [
             'totalAset' => $totalAset,
-            'kewajiban' => 0.0,
+            'kewajiban' => $hutang,
             'ekuitas' => $totalEkuitas,
-            'totalPasiva' => $totalEkuitas,
+            'totalPasiva' => $hutang + $totalEkuitas,
         ];
 
-        // 8. Pelanggan & Pemasok Teratas (Top Partners) — limit 3
+        // 11. Pelanggan & Pemasok Teratas (Top Partners)
         $topCustomers = DB::table('penjualans')
             ->join('pelanggans', 'penjualans.pelanggan_id', '=', 'pelanggans.id')
-            ->where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
+            ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate])
             ->select('pelanggans.nama_pelanggan as nama', DB::raw('SUM(penjualans.total) as total_amount'))
             ->groupBy('pelanggans.id', 'pelanggans.nama_pelanggan')
             ->orderByDesc('total_amount')
@@ -242,18 +220,18 @@ class DashboardController extends Controller
 
         $topSuppliers = DB::table('pembelians')
             ->join('pemasoks', 'pembelians.pemasok_id', '=', 'pemasoks.id')
-            ->where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
+            ->whereBetween(DB::raw('DATE(pembelians.created_at)'), [$startDate, $endDate])
             ->select('pemasoks.nama_pemasok as nama', DB::raw('SUM(pembelians.total) as total_amount'))
             ->groupBy('pemasoks.id', 'pemasoks.nama_pemasok')
             ->orderByDesc('total_amount')
             ->limit(3)
             ->get();
 
-        // 9. Produk Terlaris — limit 5
+        // 12. Produk Terlaris
         $bestSellers = DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
-            ->where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))
+            ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate])
             ->select(
                 'produks.nama_produk as nama',
                 DB::raw('SUM(detail_penjualans.qty) as total_qty'),
@@ -264,7 +242,7 @@ class DashboardController extends Controller
             ->limit(5)
             ->get();
 
-        // 10. Bahan Baku Kritis (stok < 10) — limit 5
+        // 13. Bahan Baku Kritis (stok < 10)
         $criticalMaterials = BahanBaku::where('stok', '<', 10)
             ->orderBy('stok', 'asc')
             ->limit(5)
@@ -296,12 +274,12 @@ class DashboardController extends Controller
                 'pengeluaran' => $operasional + $pembelianBahan,
                 'pengeluaranBahan' => $pembelianBahan,
                 'pengeluaranOperasional' => $operasional,
-                'jumlahPesanan' => Penjualan::where($dateRangeWhere[0], ...array_slice($dateRangeWhere, 1))->count(),
+                'jumlahPesanan' => $penjualanQuery->clone()->count(),
                 'jumlahPelanggan' => DB::table('pelanggans')->whereExists(function ($q) use ($preOrderId, $startDate, $endDate) {
                     $q->select(DB::raw(1))
                         ->from('penjualans')
                         ->whereColumn('penjualans.pelanggan_id', 'pelanggans.id')
-                        ->whereBetween(DB::raw('DATE("created_at")'), [$startDate, $endDate]);
+                        ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate]);
                     if ($preOrderId) {
                         $q->where('penjualans.pre_order_id', $preOrderId);
                     }
