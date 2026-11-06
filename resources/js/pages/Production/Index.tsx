@@ -1,4 +1,4 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table';
@@ -6,15 +6,47 @@ import type { Produksi } from './column';
 import { columns } from './column';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, CookingPot, Layers, ClipboardList } from 'lucide-react';
-import { create } from '@/actions/App/Http/Controllers/ProduksiController';
+import { Badge } from '@/components/ui/badge';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Plus, CookingPot, Layers, ClipboardList, ChefHat } from 'lucide-react';
+import { create, index } from '@/actions/App/Http/Controllers/ProduksiController';
 
 interface Metrics {
     totalHasilBulanIni: number;
     totalTransaksiBulanIni: number;
 }
 
-export default function ProductionIndex({ productions, metrics }: { productions: Produksi[], metrics: Metrics }) {
+interface BatchOption {
+    id: number;
+    kode: string;
+    keterangan: string;
+    status: string;
+}
+
+interface ProductionNeed {
+    produk_id: number;
+    produk_kode: string | null;
+    nama_produk: string;
+    satuan: string | null;
+    total_pcs: number;
+    jumlah_pesanan: number;
+}
+
+interface Props {
+    productions: Produksi[];
+    metrics: Metrics;
+    productionNeeds: ProductionNeed[];
+    batches: BatchOption[];
+    selectedBatchId: number | null;
+}
+
+export default function ProductionIndex({ productions, metrics, productionNeeds, batches, selectedBatchId }: Props) {
     const { flash } = usePage().props as any;
 
     useEffect(() => {
@@ -25,6 +57,12 @@ export default function ProductionIndex({ productions, metrics }: { productions:
             toast.error(flash.error);
         }
     }, [flash]);
+
+    const selectedBatch = batches.find(b => b.id === selectedBatchId);
+
+    function switchBatch(batchId: string) {
+        router.get(index().url, batchId ? { pre_order_id: batchId } : {}, { preserveScroll: true });
+    }
 
     return (
         <>
@@ -41,7 +79,69 @@ export default function ProductionIndex({ productions, metrics }: { productions:
                         </Button>
                     </Link>
                 </div>
-                
+
+                {/* Kartu kebutuhan produksi per batch pre-order */}
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardHeader className="pb-2 p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <CardTitle className="flex items-center gap-2 text-base font-bold">
+                                <ChefHat className="h-4 w-4 text-primary" />
+                                Kebutuhan Produksi
+                                {selectedBatch && (
+                                    <Badge variant="outline" className="text-[10px]">
+                                        {selectedBatch.kode} — {selectedBatch.keterangan}
+                                    </Badge>
+                                )}
+                            </CardTitle>
+                            <Select
+                                value={selectedBatchId ? String(selectedBatchId) : 'none'}
+                                onValueChange={switchBatch}
+                            >
+                                <SelectTrigger className="w-full sm:w-64 h-8 text-xs">
+                                    <SelectValue placeholder="Pilih batch" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Semua batch</SelectItem>
+                                    {batches.map(b => (
+                                        <SelectItem key={b.id} value={String(b.id)}>
+                                            {b.kode} — {b.keterangan} ({b.status})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        {productionNeeds.length === 0 ? (
+                            <p className="text-sm text-muted-foreground flex items-center gap-2">
+                                <CookingPot className="h-4 w-4 text-emerald-500" />
+                                {selectedBatchId
+                                    ? 'Tidak ada pesanan yang harus dibuat di batch ini (semua sudah diserahan).'
+                                    : 'Pilih batch pre-order untuk melihat kebutuhan produksi.'}
+                            </p>
+                        ) : (
+                            <div className="flex flex-col divide-y">
+                                {productionNeeds.map((need) => (
+                                    <div key={need.produk_id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                                        <span className="font-medium truncate">
+                                            {need.nama_produk}
+                                            {need.produk_kode && (
+                                                <span className="ml-1.5 text-xs text-muted-foreground">{need.produk_kode}</span>
+                                            )}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                            {need.jumlah_pesanan} pesanan
+                                        </span>
+                                        <Badge variant="secondary" className="shrink-0 text-xs font-bold">
+                                            {need.total_pcs} {need.satuan ?? 'pcs'}
+                                        </Badge>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
                 <div className="grid grid-cols-2 gap-2.5 sm:gap-4 mb-1">
                     <Card className="rounded-2xl border border-border/80 shadow-xs">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">

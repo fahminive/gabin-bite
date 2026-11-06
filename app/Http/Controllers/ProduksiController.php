@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\PreOrder;
 use App\Models\Produksi;
 use App\Models\Produk;
 use App\Models\BahanBaku;
@@ -13,7 +14,7 @@ use Carbon\Carbon;
 
 class ProduksiController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $productions = Produksi::with(['produk', 'pemakaianBahans.bahanBaku'])
             ->orderBy('tanggal', 'desc')
@@ -29,12 +30,54 @@ class ProduksiController extends Controller
         $totalTransaksiBulanIni = Produksi::whereBetween('tanggal', [$startOfMonth, $endOfMonth])
             ->count();
 
+        // Kartu kebutuhan produksi: total pcs per varian produk yang masih
+        // harus dibuat untuk batch tertentu — dihitung dari qty produk pada
+        // pre-order pelanggan yang belum diserahan. Satu query GROUP BY.
+        $batches = PreOrder::orderByDesc('tanggal_mulai')
+            ->get(['id', 'kode', 'keterangan', 'status']);
+
+        $selectedBatchId = $request->filled('pre_order_id')
+            ? (int) $request->input('pre_order_id')
+            : PreOrder::where('status', 'buka')->orderByDesc('tanggal_mulai')->value('id');
+
+        $productionNeeds = [];
+        if ($selectedBatchId) {
+            $productionNeeds = DB::table('detail_penjualans as dp')
+                ->join('penjualans as pj', 'pj.id', '=', 'dp.penjualan_id')
+                ->join('produks as pr', 'pr.id', '=', 'dp.produk_id')
+                ->where('pj.pre_order_id', $selectedBatchId)
+                ->where('pj.status_penyerahan', 'belum_diberikan')
+                ->groupBy('pr.id', 'pr.kode', 'pr.nama_produk', 'pr.satuan')
+                ->orderByDesc(DB::raw('SUM(dp.qty)'))
+                ->get([
+                    'pr.id as produk_id',
+                    'pr.kode as produk_kode',
+                    'pr.nama_produk as nama_produk',
+                    'pr.satuan as satuan',
+                    DB::raw('SUM(dp.qty) as total_pcs'),
+                    DB::raw('COUNT(DISTINCT pj.id) as jumlah_pesanan'),
+                ])
+                ->map(fn ($row) => [
+                    'produk_id' => (int) $row->produk_id,
+                    'produk_kode' => $row->produk_kode,
+                    'nama_produk' => $row->nama_produk,
+                    'satuan' => $row->satuan,
+                    'total_pcs' => (int) $row->total_pcs,
+                    'jumlah_pesanan' => (int) $row->jumlah_pesanan,
+                ])
+                ->values()
+                ->all();
+        }
+
         return Inertia::render('Production/Index', [
             'productions' => $productions,
             'metrics' => [
-                'totalHasilBulanIni' => (int)$totalHasilBulanIni,
+                'totalHasilBulanIni' => $totalHasilBulanIni,
                 'totalTransaksiBulanIni' => $totalTransaksiBulanIni,
-            ]
+            ],
+            'productionNeeds' => $productionNeeds,
+            'batches' => $batches,
+            'selectedBatchId' => $selectedBatchId,
         ]);
     }
 
