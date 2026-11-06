@@ -43,7 +43,8 @@ class PenjualanController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'pelanggan_id' => 'required|exists:pelanggans,id',
+            'pelanggan_id' => 'nullable|exists:pelanggans,id',
+            'nama_lengkap' => 'nullable|string|max:255',
             'metode_pembayaran_id' => 'required|exists:metode_pembayarans,id',
             'pre_order_id' => 'nullable|exists:pre_orders,id',
             'no_faktur' => 'nullable|string|max:255',
@@ -72,11 +73,12 @@ class PenjualanController extends Controller
                 $noFaktur = 'PO-'.str_pad($nextId, 5, '0', STR_PAD_LEFT);
             }
 
-            $statusPembayaran = $validated['status_pembayaran'] ?? 'sudah_bayar';
+            $statusPembayaran = $validated['status_pembayaran'] ?? 'belum_bayar';
             $statusPenyerahan = $validated['status_penyerahan'] ?? 'belum_diberikan';
 
             $penjualan = Penjualan::create([
-                'pelanggan_id' => $validated['pelanggan_id'],
+                'pelanggan_id' => $validated['pelanggan_id'] ?? null,
+                'nama_lengkap' => $validated['nama_lengkap'] ?? null,
                 'metode_pembayaran_id' => $validated['metode_pembayaran_id'],
                 'pre_order_id' => $validated['pre_order_id'] ?? null,
                 'no_faktur' => $noFaktur,
@@ -110,6 +112,14 @@ class PenjualanController extends Controller
                 );
             } elseif ($penjualan->kas) {
                 $penjualan->kas->delete();
+            }
+
+            // Stok produk jadi hanya berkurang saat barang benar-benar diserahkan.
+            // (Penambahan penjualan sendiri tidak mengubah stok apapun.)
+            if ($statusPenyerahan === 'sudah_diberikan') {
+                foreach ($penjualan->detailPenjualans as $detail) {
+                    $detail->produk?->decrement('stok', $detail->qty);
+                }
             }
         });
 
@@ -179,6 +189,19 @@ class PenjualanController extends Controller
                         }
                     }
                     $data['status'] = 'selesai';
+                }
+            } elseif ($validated['status_penyerahan'] === 'belum_diberikan' && $sale->tanggal_diberikan) {
+                // Kembalikan ke belum diserahan: stok yang sudah dipotong harus dikembalikan
+                // agar tidak double-decrement / stok tidak konsisten.
+                $data['tanggal_diberikan'] = null;
+                $sale->load('detailPenjualans.produk');
+                foreach ($sale->detailPenjualans as $detail) {
+                    if ($detail->produk) {
+                        $detail->produk->increment('stok', $detail->qty);
+                    }
+                }
+                if ($sale->status === 'selesai') {
+                    $data['status'] = 'pre_order';
                 }
             } elseif ($validated['status_penyerahan'] === 'belum_diberikan') {
                 $data['tanggal_diberikan'] = null;

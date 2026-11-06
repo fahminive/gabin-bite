@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, Wrench, BadgeDollarSign, Banknote, ChartCandlestick, Activity, ShoppingCart, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, Users, Split, CalendarDays } from 'lucide-react';
+import { LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, Wrench, BadgeDollarSign, Banknote, ChartCandlestick, Activity, ShoppingCart, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, Users, Split, CalendarDays, ClipboardList } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -29,6 +29,7 @@ import * as productions from '@/actions/App/Http/Controllers/ProduksiController'
 import * as stockCorrections from '@/actions/App/Http/Controllers/KoreksiStokController';
 import * as reports from '@/actions/App/Http/Controllers/LaporanController';
 import * as preOrders from '@/actions/App/Http/Controllers/PreOrderController';
+import * as sales from '@/actions/App/Http/Controllers/PenjualanController';
 import * as users from '@/actions/App/Http/Controllers/UserController';
 
 const mainNavItems: NavItem[] = [
@@ -38,6 +39,14 @@ const mainNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
 ];
+
+const salesNavItems: NavItem[] = [
+    {
+        title: 'Daftar PO Penjualan',
+        href: sales.index(),
+        icon: ClipboardList,
+    },
+]
 
 const masterDataNavItems: NavItem[] = [
     {
@@ -61,7 +70,7 @@ const masterDataNavItems: NavItem[] = [
         icon: CalendarDays,
     },
     {
-        title: 'Pelanggan & Pre-Order',
+        title: 'Pelanggan',
         href: customers.index(),
         icon: BookUser,
     },
@@ -174,6 +183,7 @@ export function AppSidebar() {
                     />
                 )}
                 <NavMain items={masterDataNavItems} group='Data Dapur' />
+                <NavMain items={salesNavItems} group='Jual-Jualan' />
                 <NavMain items={financeNavItems} group='Duit & Dompet' />
                 <NavMain items={purchaseNavItems} group='Belanja' />
                 <NavMain items={productionNavItems} group='Bikin Gabin' />

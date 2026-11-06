@@ -54,5 +54,7 @@ class DatabaseSeeder extends Seeder
         );
 
         \App\Models\Mitra::ensureTrio();
+
+        $this->call(KategoriPelangganSeeder::class);
     }
 }

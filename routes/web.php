@@ -24,9 +24,7 @@ Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    Route::get('dashboard', function () {
-        return redirect('/materials');
-    })->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('reports/cash-flow', [LaporanController::class, 'cashFlow'])->name('reports.cash-flow');
     Route::get('reports/cash-flow/pdf', [LaporanController::class, 'cashFlowPdf'])->name('reports.cash-flow.pdf');
@@ -56,6 +54,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('sales', PenjualanController::class)->except(['index', 'show']);
         Route::post('sales/{sale}/fulfill', [PenjualanController::class, 'fulfill'])->name('sales.fulfill');
         Route::patch('sales/{sale}/status', [PenjualanController::class, 'updateStatus'])->name('sales.status');
+        Route::get('productions/{production}/usage', [ProduksiController::class, 'usage'])->name('productions.usage');
         Route::patch('split-bills/mitras/{mitra}', [SplitBillController::class, 'updateMitra'])->name('split-bills.mitras.update');
         Route::post('split-bills/transfers', [SplitBillController::class, 'storeTransfer'])->name('split-bills.transfers.store');
         Route::put('split-bills/transfers/{transfer}', [SplitBillController::class, 'updateTransfer'])->name('split-bills.transfers.update');

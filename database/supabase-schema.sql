@@ -313,7 +313,8 @@ CREATE TABLE IF NOT EXISTS "pembelians" (
 
 CREATE TABLE IF NOT EXISTS "penjualans" (
     "id" SERIAL PRIMARY KEY NOT NULL,
-    "pelanggan_id" integer NOT NULL,
+    "pelanggan_id" integer, -- nullable: hanya kategori (umum/usaha/reseller)
+    "nama_lengkap" VARCHAR(255), -- nama pembeli, teks opsional (bukan FK)
     "metode_pembayaran_id" integer NOT NULL,
     "no_faktur" VARCHAR(255) NOT NULL,
     "total" NUMERIC NOT NULL,
@@ -326,7 +327,7 @@ CREATE TABLE IF NOT EXISTS "penjualans" (
     "tanggal_bayar" TIMESTAMP WITHOUT TIME ZONE,
     "tanggal_diberikan" TIMESTAMP WITHOUT TIME ZONE,
     foreign key("metode_pembayaran_id") references metode_pembayarans("id") on delete cascade on update no action,
-    foreign key("pelanggan_id") references pelanggans("id") on delete cascade on update no action,
+    foreign key("pelanggan_id") references pelanggans("id") on delete set null,
     foreign key("pre_order_id") references "pre_orders"("id") on delete set null
 );
 

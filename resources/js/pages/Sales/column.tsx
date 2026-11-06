@@ -34,6 +34,7 @@ export type Penjualan = {
   status: 'draft' | 'diproses' | 'siap' | 'selesai'
   status_pembayaran: 'belum_bayar' | 'sudah_bayar'
   status_penyerahan: 'belum_diberikan' | 'sudah_diberikan'
+  nama_lengkap?: string | null
   tanggal_bayar?: string | null
   tanggal_diberikan?: string | null
   total: number
@@ -62,9 +63,8 @@ export const columns: ColumnDef<Penjualan>[] = [
     cell: ({ row }) => {
       const date = new Date(row.getValue("created_at"))
       return date.toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
+        day: "2-digit",
+        month: "short"
       })
     }
   },
@@ -74,11 +74,13 @@ export const columns: ColumnDef<Penjualan>[] = [
   },
   {
     id: "pelanggan",
+    meta: { className: "hidden md:table-cell" },
     header: "Pelanggan",
-    cell: ({ row }) => row.original.pelanggan?.nama_pelanggan ?? "-"
+    cell: ({ row }) => row.original.nama_lengkap || row.original.pelanggan?.nama_pelanggan || "-"
   },
   {
     id: "items",
+    meta: { className: "hidden lg:table-cell" },
     header: "Produk Terjual",
     cell: ({ row }) => {
       const items = row.original.detail_penjualans || [];
@@ -120,6 +122,7 @@ export const columns: ColumnDef<Penjualan>[] = [
   },
   {
     id: "batch",
+    meta: { className: "hidden lg:table-cell" },
     header: "Batch",
     cell: ({ row }) => row.original.pre_order
       ? `${row.original.pre_order.kode} — ${row.original.pre_order.keterangan}`
@@ -132,6 +135,7 @@ export const columns: ColumnDef<Penjualan>[] = [
   },
   {
     id: "status_penyerahan",
+    meta: { className: "hidden sm:table-cell" },
     header: "Penyerahan",
     cell: ({ row }) => <DeliveryBadge status={row.original.status_penyerahan} />
   },

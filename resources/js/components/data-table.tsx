@@ -92,8 +92,9 @@ export function DataTable<TData, TValue>({
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id} className="bg-muted/40 hover:bg-muted/40">
                   {headerGroup.headers.map((header) => {
+                    const metaClass = (header.column.columnDef.meta as { className?: string } | undefined)?.className
                     return (
-                      <TableHead key={header.id} className="font-extrabold text-xs uppercase tracking-wider">
+                      <TableHead key={header.id} className={`font-extrabold text-xs uppercase tracking-wider ${metaClass ?? ''}`}>
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -114,11 +115,14 @@ export function DataTable<TData, TValue>({
                     data-state={row.getIsSelected() && "selected"}
                     className="hover:bg-muted/30 transition-colors"
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="py-3 px-3 text-sm">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const metaClass = (cell.column.columnDef.meta as { className?: string } | undefined)?.className
+                      return (
+                        <TableCell key={cell.id} className={`py-3 px-3 text-sm ${metaClass ?? ''}`}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      )
+                    })}
                   </TableRow>
                 ))
               ) : (

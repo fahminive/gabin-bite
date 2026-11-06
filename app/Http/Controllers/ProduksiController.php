@@ -104,6 +104,38 @@ class ProduksiController extends Controller
         return redirect()->route('productions.index')->with('success', 'Transaksi Produksi Berhasil Dicatat.');
     }
 
+    public function usage(Produksi $production)
+    {
+        // Satu eager-load: pemakaian bahan per batch + stok bahan terkini,
+        // untuk membandingkan kecukupan stok vs qty yang dipakai.
+        $production->load([
+            'produk:id,kode,nama_produk,satuan',
+            'pemakaianBahans' => fn ($q) => $q->orderBy('id'),
+            'pemakaianBahans.bahanBaku:id,kode,nama_bahan,satuan,stok',
+        ]);
+
+        return Inertia::render('Production/Usage', [
+            'batch' => [
+                'id'         => $production->id,
+                'tanggal'    => $production->tanggal,
+                'qty_hasil'  => (int) $production->qty_hasil,
+                'keterangan' => $production->keterangan,
+                'produk'     => $production->produk ? [
+                    'nama_produk' => $production->produk->nama_produk,
+                    'satuan'      => $production->produk->satuan,
+                ] : null,
+            ],
+            'usage' => $production->pemakaianBahans->map(fn ($row) => [
+                'bahan_id'     => $row->bahan_baku_id,
+                'nama_bahan'   => $row->bahanBaku?->nama_bahan,
+                'kode_bahan'   => $row->bahanBaku?->kode,
+                'satuan'       => $row->bahanBaku?->satuan,
+                'qty_dipakai'  => (int) $row->qty_bahan_dipakai,
+                'stok_sekarang' => (float) ($row->bahanBaku?->stok ?? 0),
+            ]),
+        ]);
+    }
+
     public function destroy(Produksi $production)
     {
         DB::transaction(function () use ($production) {

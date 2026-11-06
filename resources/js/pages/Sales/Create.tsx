@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { useForm, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,6 @@ interface Customer {
     id: number
     nama_pelanggan: string
 }
-
 interface PaymentMethod {
     id: number
     nama_metode: string
@@ -66,11 +65,22 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
 
     const form = useForm({
         pelanggan_id: '',
+        nama_lengkap: '',
         metode_pembayaran_id: '',
         pre_order_id: '',
         no_faktur: '',
+        status_pembayaran: 'belum_bayar',
         items: [] as Item[],
     });
+
+    // Default pelanggan selalu kategori "Umum" (orang biasa).
+    useEffect(() => {
+        const umum = customers.find(c => c.nama_pelanggan.toLowerCase() === 'umum');
+        if (umum && form.data.pelanggan_id === '') {
+            form.setData('pelanggan_id', String(umum.id));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [customers]);
 
     function addItem() {
         setItems(prev => [...prev, { produk_id: '', qty: '', harga_satuan: '' }]);
@@ -147,13 +157,13 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel htmlFor="pelanggan_id">Pelanggan</FieldLabel>
+                                        <FieldLabel htmlFor="pelanggan_id">Kategori Pembeli</FieldLabel>
                                         <Select
                                             value={form.data.pelanggan_id}
                                             onValueChange={val => form.setData('pelanggan_id', val)}
                                         >
                                             <SelectTrigger id="pelanggan_id" className="w-full">
-                                                <SelectValue placeholder="Pilih pelanggan" />
+                                                <SelectValue placeholder="Pilih kategori" />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {customers.map(c => (
@@ -162,6 +172,17 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
                                             </SelectContent>
                                         </Select>
                                         {form.errors.pelanggan_id && <FieldError>{form.errors.pelanggan_id}</FieldError>}
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel htmlFor="nama_lengkap">Nama Lengkap (Opsional)</FieldLabel>
+                                        <Input
+                                            id="nama_lengkap"
+                                            placeholder="Nama pembeli, kalau perlu dicatat"
+                                            value={form.data.nama_lengkap}
+                                            onChange={e => form.setData('nama_lengkap', e.target.value)}
+                                        />
+                                        {form.errors.nama_lengkap && <FieldError>{form.errors.nama_lengkap}</FieldError>}
                                     </Field>
                                 </div>
 
@@ -178,6 +199,23 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
                                 </Field>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <Field>
+                                        <FieldLabel htmlFor="status_pembayaran">Status Pembayaran</FieldLabel>
+                                        <Select
+                                            value={form.data.status_pembayaran}
+                                            onValueChange={val => form.setData('status_pembayaran', val)}
+                                        >
+                                            <SelectTrigger id="status_pembayaran" className="w-full">
+                                                <SelectValue placeholder="Pilih status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="belum_bayar">Belum Bayar</SelectItem>
+                                                <SelectItem value="sudah_bayar">Sudah Bayar</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {form.errors.status_pembayaran && <FieldError>{form.errors.status_pembayaran}</FieldError>}
+                                    </Field>
+
                                     <Field>
                                         <FieldLabel htmlFor="metode_pembayaran_id">Metode Pembayaran</FieldLabel>
                                         <Select

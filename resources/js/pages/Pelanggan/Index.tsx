@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Users, PhoneCall } from 'lucide-react';
 import { create } from '@/actions/App/Http/Controllers/PelangganController';
-import { create as createPreOrder } from '@/actions/App/Http/Controllers/PenjualanController';
 
 export default function PelangganIndex({ customers }: { customers: Pelanggan[] }) {
     const { flash } = usePage().props as any;
@@ -35,12 +34,7 @@ export default function PelangganIndex({ customers }: { customers: Pelanggan[] }
                         <p className="text-xs text-muted-foreground">Kelola pelanggan dan pembeli setia Gabin Bite</p>
                     </div>
                     <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <Link href={createPreOrder().url} className="flex-1 sm:flex-initial">
-                            <Button variant="outline" className="w-full rounded-xl h-9 text-xs sm:text-sm">
-                                <Plus className="mr-1.5 h-3.5 w-3.5" /> Catat PO
-                            </Button>
-                        </Link>
-                        <Link href={create().url} className="flex-1 sm:flex-initial">
+                        <Link href={create().url} className="w-full sm:w-auto">
                             <Button className="w-full rounded-xl h-9 text-xs sm:text-sm">
                                 <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah Pelanggan
                             </Button>
