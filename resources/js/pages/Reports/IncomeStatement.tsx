@@ -12,11 +12,14 @@ import * as reports from '@/actions/App/Http/Controllers/LaporanController';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { BatchFilter, type BatchOption } from '@/components/batch-filter';
 import { formatRupiah } from '@/lib/utils';
 
 interface Props {
     startDate: string;
     endDate: string;
+    preOrderId?: string | number | null;
+    batches?: BatchOption[];
     pendapatan: number;
     hpp: number;
     labaKotor: number;
@@ -41,6 +44,8 @@ interface Props {
 export default function IncomeStatement({
     startDate,
     endDate,
+    preOrderId,
+    batches = [],
     pendapatan,
     hpp,
     labaKotor,
@@ -54,11 +59,14 @@ export default function IncomeStatement({
     const [filterStart, setFilterStart] = useState(startDate);
     const [filterEnd, setFilterEnd] = useState(endDate);
 
+    const batchQuery = preOrderId ? { pre_order_id: preOrderId } : {};
+
     function handleFilter() {
         router.visit(reports.incomeStatement().url, {
             data: {
                 start_date: filterStart,
                 end_date: filterEnd,
+                ...batchQuery,
             },
             preserveState: true,
         });
@@ -67,7 +75,7 @@ export default function IncomeStatement({
     function handlePrint() {
         window.open(
             reports.incomeStatementPdf({
-                query: { start_date: filterStart, end_date: filterEnd },
+                query: { start_date: filterStart, end_date: filterEnd, ...batchQuery },
             }).url,
             '_blank',
         );
@@ -114,6 +122,15 @@ export default function IncomeStatement({
                                 />
                             </div>
                         </div>
+                        <BatchFilter
+                            batches={batches}
+                            value={preOrderId}
+                            url={reports.incomeStatement().url}
+                            extraQuery={{
+                                start_date: filterStart,
+                                end_date: filterEnd,
+                            }}
+                        />
                         <div className="flex w-full items-center gap-2 sm:w-auto">
                             <Button
                                 onClick={handleFilter}

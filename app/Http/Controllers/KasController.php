@@ -15,27 +15,15 @@ class KasController extends Controller
     {
         $preOrderId = $request->input('pre_order_id');
 
-        $query = Kas::orderBy('tanggal', 'desc')
+        $query = Kas::query()
+            ->forPreOrder($preOrderId)
+            ->orderBy('tanggal', 'desc')
             ->orderBy('created_at', 'desc');
-
-        if ($preOrderId) {
-            $query->where(function ($q) use ($preOrderId) {
-                $q->whereHasMorph('kasable', [\App\Models\Penjualan::class], function ($sq) use ($preOrderId) {
-                    $sq->where('pre_order_id', $preOrderId);
-                })
-                ->orWhereHasMorph('kasable', [\App\Models\Pembelian::class], function ($sq) use ($preOrderId) {
-                    $sq->where('pre_order_id', $preOrderId);
-                })
-                ->orWhereHasMorph('kasable', [\App\Models\PengeluaranOperasional::class], function ($sq) use ($preOrderId) {
-                    $sq->where('pre_order_id', $preOrderId);
-                });
-            });
-        }
 
         $transactions = $query->get();
 
-        $totalMasuk = Kas::sum('masuk');
-        $totalKeluar = Kas::sum('keluar');
+        $totalMasuk = (float) $transactions->sum('masuk');
+        $totalKeluar = (float) $transactions->sum('keluar');
         $saldoSaatIni = $totalMasuk - $totalKeluar;
 
         return Inertia::render('Kas/Index', [

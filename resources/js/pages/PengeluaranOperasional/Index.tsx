@@ -1,4 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
+import { BatchFilter, type BatchOption } from '@/components/batch-filter';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table';
@@ -7,7 +8,7 @@ import { columns } from './column';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Flame, TrendingDown, ArrowDownUp } from 'lucide-react';
-import { create } from '@/actions/App/Http/Controllers/PengeluaranOperasionalController';
+import { create, index } from '@/actions/App/Http/Controllers/PengeluaranOperasionalController';
 import { formatRupiah } from '@/lib/utils';
 
 interface Metrics {
@@ -19,7 +20,7 @@ interface Metrics {
     jumlahTransaksi: number;
 }
 
-export default function ExpenseIndex({ expenses, metrics }: { expenses: ExpenseType[], metrics: Metrics }) {
+export default function ExpenseIndex({ expenses, metrics, batches = [], filters }: { expenses: ExpenseType[], metrics: Metrics, batches?: BatchOption[], filters?: { pre_order_id?: string | number | null } }) {
     const { flash } = usePage().props as any;
 
     useEffect(() => {
@@ -37,11 +38,18 @@ export default function ExpenseIndex({ expenses, metrics }: { expenses: ExpenseT
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
                 <div className="flex items-center justify-between gap-4 mb-2">
                     <h1 className="text-xl font-bold">Biaya Operasional</h1>
-                    <Link href={create().url}>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Catat Biaya
-                        </Button>
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <BatchFilter
+                            batches={batches}
+                            value={filters?.pre_order_id}
+                            url={index().url}
+                        />
+                        <Link href={create().url}>
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" /> Catat Biaya
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">

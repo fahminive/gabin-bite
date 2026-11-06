@@ -17,32 +17,34 @@ class PengeluaranOperasionalController extends Controller
 {
     public function index(Request $request)
     {
-        $query = PengeluaranOperasional::with(['preOrder', 'mitra']);
+        $preOrderId = $request->input('pre_order_id');
 
-        if ($request->filled('pre_order_id')) {
-            $query->where('pre_order_id', $request->input('pre_order_id'));
-        }
+        $query = PengeluaranOperasional::with(['preOrder', 'mitra'])
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId));
 
         $expenses = $query->orderBy('tanggal', 'desc')->get();
 
         $startOfMonth = Carbon::now()->startOfMonth()->toDateString();
         $endOfMonth = Carbon::now()->endOfMonth()->toDateString();
 
-        $totalBulanIni = PengeluaranOperasional::whereBetween('tanggal', [$startOfMonth, $endOfMonth])
+        $metricsQuery = PengeluaranOperasional::query()
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId));
+
+        $totalBulanIni = (clone $metricsQuery)->whereBetween('tanggal', [$startOfMonth, $endOfMonth])
             ->sum('nominal');
 
-        $pengeluaranTerbesarRecord = PengeluaranOperasional::orderBy('nominal', 'desc')->first();
+        $pengeluaranTerbesarRecord = (clone $metricsQuery)->orderBy('nominal', 'desc')->first();
         $pengeluaranTerbesar = [
             'kategori' => $pengeluaranTerbesarRecord ? $pengeluaranTerbesarRecord->kategori : '-',
             'nominal' => $pengeluaranTerbesarRecord ? $pengeluaranTerbesarRecord->nominal : 0,
         ];
 
-        $jumlahTransaksi = PengeluaranOperasional::count();
+        $jumlahTransaksi = (clone $metricsQuery)->count();
 
         return Inertia::render('PengeluaranOperasional/Index', [
             'expenses' => $expenses,
             'batches' => PreOrder::orderByDesc('created_at')->get(),
-            'filters' => ['pre_order_id' => $request->input('pre_order_id')],
+            'filters' => ['pre_order_id' => $preOrderId],
             'metrics' => [
                 'totalBulanIni' => $totalBulanIni,
                 'pengeluaranTerbesar' => $pengeluaranTerbesar,

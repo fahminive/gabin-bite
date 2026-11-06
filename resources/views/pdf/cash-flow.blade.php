@@ -36,9 +36,19 @@
             <td class="text-right">Rp {{ number_format($inflows['modal'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         <tr>
-            <td style="padding-left: 25px;">Penerimaan Lainnya</td>
-            <td class="text-right">Rp {{ number_format($inflows['lainnya'] ?? 0, 0, ',', '.') }}</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Usaha</td>
+            <td class="text-right">Rp {{ number_format($inflows['cashUsaha'] ?? 0, 0, ',', '.') }}</td>
         </tr>
+        <tr>
+            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Member</td>
+            <td class="text-right">Rp {{ number_format($inflows['cashPribadi'] ?? 0, 0, ',', '.') }}</td>
+        </tr>
+        @if (($inflows['cashLainnya'] ?? 0) != 0)
+        <tr>
+            <td style="padding-left: 25px;">Penyesuaian Kas — Lainnya</td>
+            <td class="text-right">Rp {{ number_format($inflows['cashLainnya'], 0, ',', '.') }}</td>
+        </tr>
+        @endif
         <tr class="font-bold bg-gray-50">
             <td style="padding-left: 15px;">Total Arus Kas Masuk</td>
             <td class="text-right text-success">Rp {{ number_format($totalInflow, 0, ',', '.') }}</td>
@@ -65,9 +75,19 @@
             <td class="text-right">Rp {{ number_format($outflows['peralatan'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         <tr>
-            <td style="padding-left: 25px;">Pengeluaran Lainnya</td>
-            <td class="text-right">Rp {{ number_format($outflows['lainnya'] ?? 0, 0, ',', '.') }}</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Usaha</td>
+            <td class="text-right">Rp {{ number_format($outflows['cashUsaha'] ?? 0, 0, ',', '.') }}</td>
         </tr>
+        <tr>
+            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Member</td>
+            <td class="text-right">Rp {{ number_format($outflows['cashPribadi'] ?? 0, 0, ',', '.') }}</td>
+        </tr>
+        @if (($outflows['cashLainnya'] ?? 0) != 0)
+        <tr>
+            <td style="padding-left: 25px;">Penyesuaian Kas — Lainnya</td>
+            <td class="text-right">Rp {{ number_format($outflows['cashLainnya'], 0, ',', '.') }}</td>
+        </tr>
+        @endif
         <tr class="font-bold bg-gray-50">
             <td style="padding-left: 15px;">Total Arus Kas Keluar</td>
             <td class="text-right text-danger">Rp {{ number_format($totalOutflow, 0, ',', '.') }}</td>

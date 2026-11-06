@@ -1,4 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
+import { BatchFilter, type BatchOption } from '@/components/batch-filter';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table';
@@ -12,9 +13,11 @@ import { formatRupiah } from '@/lib/utils';
 
 interface Props {
     purchases: Pembelian[]
+    batches?: BatchOption[]
+    filters?: { pre_order_id?: string | number | null }
 }
 
-export default function PurchasesIndex({ purchases }: Props) {
+export default function PurchasesIndex({ purchases, batches = [], filters }: Props) {
     const { flash } = usePage().props as any;
 
     useEffect(() => {
@@ -35,11 +38,18 @@ export default function PurchasesIndex({ purchases }: Props) {
                         <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Transaksi Belanja Bahan</h1>
                         <p className="text-xs text-muted-foreground">Catatan pengeluaran pembelian bahan baku dapur</p>
                     </div>
-                    <Link href={create().url} className="w-full sm:w-auto">
-                        <Button className="w-full sm:w-auto rounded-xl h-9 text-xs sm:text-sm">
-                            <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah Pembelian
-                        </Button>
-                    </Link>
+                    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
+                        <BatchFilter
+                            batches={batches}
+                            value={filters?.pre_order_id}
+                            url={index().url}
+                        />
+                        <Link href={create().url} className="w-full sm:w-auto">
+                            <Button className="w-full sm:w-auto rounded-xl h-9 text-xs sm:text-sm">
+                                <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah Pembelian
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 mb-1">

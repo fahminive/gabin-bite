@@ -10,6 +10,7 @@ use App\Models\Mitra;
 use App\Models\PengeluaranOperasional;
 use App\Models\Penjualan;
 use App\Models\Peralatan;
+use App\Models\PreOrder;
 use App\Models\Produk;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -108,55 +109,86 @@ class LaporanController extends Controller
         return $query->whereRaw('(tanggal IS NOT NULL AND tanggal <= ?) OR (tanggal IS NULL AND DATE(created_at) <= ?)', [$date, $date]);
     }
 
+    private function preOrderId(Request $request): ?int
+    {
+        $id = $request->input('pre_order_id');
+
+        return $id ? (int) $id : null;
+    }
+
+    private function batches()
+    {
+        return PreOrder::orderByDesc('created_at')->get(['id', 'kode', 'keterangan']);
+    }
+
+    /**
+     * Map hasil agregasi baris kas (per `sumber` + `sumber_dana`) ke struktur
+     * yang dipakai view: kategori baku sesuai arah arus kas, sisanya masuk
+     * ke Penyesuaian Kas yang dipecah per sumber dana (uang usaha / member).
+     * Total dihitung dari SEMUA baris sehingga tidak ada kas yang terlewat.
+     *
+     * @param  \Illuminate\Support\Collection<int, object{sumber: string|null, sumber_dana: string|null, total: string|float|int}>  $rows
+     * @param  array<string, float>  $formatted  kategori baku arah ini, nilai awal 0
+     * @return array{0: array<string, float>, 1: float}
+     */
+    private function mapKasRowsToFlow($rows, array $knownSources, array $formatted)
+    {
+        $total = 0.0;
+
+        foreach ($rows as $row) {
+            $val = (float) $row->total;
+            $total += $val;
+            $src = $row->sumber ?: 'lainnya';
+
+            if (in_array($src, $knownSources, true)) {
+                $formatted[$src] += $val;
+                continue;
+            }
+
+            // Penyesuaian kas manual — dicatat per sumber dana agar perubahan
+            // kas (uang usaha / uang member) tetap terlihat dan terhitung.
+            $danaKey = $row->sumber_dana === 'simpanan_usaha'
+                ? 'cashUsaha'
+                : ($row->sumber_dana === 'pribadi' ? 'cashPribadi' : 'cashLainnya');
+            $formatted[$danaKey] += $val;
+        }
+
+        return [$formatted, $total];
+    }
+
     private function getCashFlowData(Request $request)
     {
         [$startDate, $endDate] = $this->resolveDefaultDateRange($request);
+        $preOrderId = $this->preOrderId($request);
 
         // 1. Saldo Awal Kas
-        $saldoAwal = $this->applyKasBefore(Kas::where('masuk', '>', 0), $startDate)->sum('masuk')
-            - $this->applyKasBefore(Kas::where('keluar', '>', 0), $startDate)->sum('keluar');
+        $saldoAwal = $this->applyKasBefore(Kas::query()->forPreOrder($preOrderId)->where('masuk', '>', 0), $startDate)->sum('masuk')
+            - $this->applyKasBefore(Kas::query()->forPreOrder($preOrderId)->where('keluar', '>', 0), $startDate)->sum('keluar');
 
-        // 2. Arus Kas Masuk
-        $inflows = $this->applyKasBetween(Kas::where('masuk', '>', 0), $startDate, $endDate)
-            ->selectRaw('sumber, SUM(masuk) as total')
-            ->groupBy('sumber')
-            ->get()
-            ->pluck('total', 'sumber')
-            ->toArray();
+        // 2. Arus Kas Masuk — dikelompokkan per `sumber` + `sumber_dana` sekaligus
+        //    (1 query) supaya penyesuaian kas manual (uang usaha/member) ikut
+        //    terhitung dalam total dan tampil sebagai kategori tersendiri.
+        $inflowRows = $this->applyKasBetween(Kas::query()->forPreOrder($preOrderId)->where('masuk', '>', 0), $startDate, $endDate)
+            ->selectRaw('sumber, sumber_dana, SUM(masuk) as total')
+            ->groupBy('sumber', 'sumber_dana')
+            ->get();
 
         // 3. Arus Kas Keluar
-        $outflows = $this->applyKasBetween(Kas::where('keluar', '>', 0), $startDate, $endDate)
-            ->selectRaw('sumber, SUM(keluar) as total')
-            ->groupBy('sumber')
-            ->get()
-            ->pluck('total', 'sumber')
-            ->toArray();
+        $outflowRows = $this->applyKasBetween(Kas::query()->forPreOrder($preOrderId)->where('keluar', '>', 0), $startDate, $endDate)
+            ->selectRaw('sumber, sumber_dana, SUM(keluar) as total')
+            ->groupBy('sumber', 'sumber_dana')
+            ->get();
 
-        // Ensure all possible sources are in arrays
-        $sourcesIn = ['penjualan', 'piutang', 'modal', 'lainnya'];
-        $sourcesOut = ['pembelian', 'hutang', 'operasional', 'peralatan', 'lainnya'];
-
-        $formattedInflows = [];
-        $totalInflow = 0;
-        foreach ($sourcesIn as $src) {
-            $val = (float) ($inflows[$src] ?? 0);
-            $formattedInflows[$src] = $val;
-            $totalInflow += $val;
-        }
-
-        $formattedOutflows = [];
-        $totalOutflow = 0;
-        foreach ($sourcesOut as $src) {
-            $val = (float) ($outflows[$src] ?? 0);
-            $formattedOutflows[$src] = $val;
-            $totalOutflow += $val;
-        }
+        [$formattedInflows, $totalInflow] = $this->mapKasRowsToFlow($inflowRows, ['penjualan', 'piutang', 'modal'], ['penjualan' => 0.0, 'piutang' => 0.0, 'modal' => 0.0, 'cashUsaha' => 0.0, 'cashPribadi' => 0.0, 'cashLainnya' => 0.0]);
+        [$formattedOutflows, $totalOutflow] = $this->mapKasRowsToFlow($outflowRows, ['pembelian', 'hutang', 'operasional', 'peralatan'], ['pembelian' => 0.0, 'hutang' => 0.0, 'operasional' => 0.0, 'peralatan' => 0.0, 'cashUsaha' => 0.0, 'cashPribadi' => 0.0, 'cashLainnya' => 0.0]);
 
         $saldoAkhir = $saldoAwal + $totalInflow - $totalOutflow;
 
         return [
             'startDate' => $startDate,
             'endDate' => $endDate,
+            'preOrderId' => $preOrderId,
+            'batches' => $this->batches(),
             'saldoAwal' => $saldoAwal,
             'inflows' => $formattedInflows,
             'outflows' => $formattedOutflows,
@@ -182,22 +214,28 @@ class LaporanController extends Controller
     private function getIncomeStatementData(Request $request)
     {
         [$startDate, $endDate] = $this->resolveDefaultDateRange($request);
+        $preOrderId = $this->preOrderId($request);
 
         // 1. Pendapatan Penjualan
-        $pendapatan = (float) Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])->sum('total');
+        $pendapatan = (float) Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->sum('total');
 
         // 2. Harga Pokok Penjualan (HPP)
         $hpp = (float) DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
             ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate])
+            ->when($preOrderId, fn ($q) => $q->where('penjualans.pre_order_id', $preOrderId))
             ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
 
         // 3. Laba Kotor
         $labaKotor = $pendapatan - $hpp;
 
         // 4. Beban Operasional (Termasuk Rugi/Laba dari Koreksi Stok)
-        $operasionalKas = (float) PengeluaranOperasional::whereBetween('tanggal', [$startDate, $endDate])->sum('nominal');
+        $operasionalKas = (float) PengeluaranOperasional::whereBetween('tanggal', [$startDate, $endDate])
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->sum('nominal');
 
         $koreksiStokLoss = (float) DB::table('koreksi_stoks')
             ->join('produks', 'koreksi_stoks.produk_id', '=', 'produks.id')
@@ -236,6 +274,8 @@ class LaporanController extends Controller
         return [
             'startDate' => $startDate,
             'endDate' => $endDate,
+            'preOrderId' => $preOrderId,
+            'batches' => $this->batches(),
             'pendapatan' => $pendapatan,
             'hpp' => $hpp,
             'labaKotor' => $labaKotor,
@@ -281,11 +321,12 @@ class LaporanController extends Controller
         $defaultDate = ! empty($bounds) ? max($bounds) : Carbon::now()->toDateString();
 
         $date = $request->input('date', $defaultDate);
+        $preOrderId = $this->preOrderId($request);
 
         // 1. ASET (HARTA)
         // a. Aset Lancar
-        $kas = (float) ($this->applyKasOnOrBefore(Kas::where('masuk', '>', 0), $date)->sum('masuk')
-            - $this->applyKasOnOrBefore(Kas::where('keluar', '>', 0), $date)->sum('keluar'));
+        $kas = (float) ($this->applyKasOnOrBefore(Kas::query()->forPreOrder($preOrderId)->where('masuk', '>', 0), $date)->sum('masuk')
+            - $this->applyKasOnOrBefore(Kas::query()->forPreOrder($preOrderId)->where('keluar', '>', 0), $date)->sum('keluar'));
 
         $piutang = 0.0;
 
@@ -312,14 +353,19 @@ class LaporanController extends Controller
         $modal = $modalKas + $peralatanAwal;
 
         // Laba Ditahan (Kumulatif Laba Bersih sejak awal s.d $date)
-        $pendapatanKumulatif = Penjualan::where(DB::raw('DATE(created_at)'), '<=', $date)->sum('total');
+        $pendapatanKumulatif = Penjualan::where(DB::raw('DATE(created_at)'), '<=', $date)
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->sum('total');
         $hppKumulatif = DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
             ->where(DB::raw('DATE(penjualans.created_at)'), '<=', $date)
+            ->when($preOrderId, fn ($q) => $q->where('penjualans.pre_order_id', $preOrderId))
             ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
 
-        $operasionalKasKumulatif = PengeluaranOperasional::where('tanggal', '<=', $date)->sum('nominal');
+        $operasionalKasKumulatif = PengeluaranOperasional::where('tanggal', '<=', $date)
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->sum('nominal');
 
         $koreksiStokLossKumulatif = (float) DB::table('koreksi_stoks')
             ->join('produks', 'koreksi_stoks.produk_id', '=', 'produks.id')
@@ -342,6 +388,8 @@ class LaporanController extends Controller
 
         return [
             'date' => $date,
+            'preOrderId' => $preOrderId,
+            'batches' => $this->batches(),
             'assets' => [
                 'kas' => $kas,
                 'piutang' => $piutang,

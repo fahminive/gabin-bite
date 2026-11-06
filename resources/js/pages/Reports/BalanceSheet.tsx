@@ -3,12 +3,15 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { BatchFilter, type BatchOption } from '@/components/batch-filter';
 import { formatRupiah } from '@/lib/utils';
 import { Calendar, Printer, Scale, ShieldAlert, CheckCircle } from 'lucide-react';
 import * as reports from '@/actions/App/Http/Controllers/LaporanController';
 
 interface Props {
     date: string;
+    preOrderId?: string | number | null;
+    batches?: BatchOption[];
     assets: {
         kas: number;
         piutang: number;
@@ -34,6 +37,8 @@ interface Props {
 
 export default function BalanceSheet({
     date,
+    preOrderId,
+    batches = [],
     assets,
     liabilities,
     equity,
@@ -42,17 +47,20 @@ export default function BalanceSheet({
 }: Props) {
     const [filterDate, setFilterDate] = useState(date);
 
+    const batchQuery = preOrderId ? { pre_order_id: preOrderId } : {};
+
     function handleFilter() {
         router.visit(reports.balanceSheet().url, {
             data: {
                 date: filterDate,
+                ...batchQuery,
             },
             preserveState: true,
         });
     }
 
     function handlePrint() {
-        window.open(reports.balanceSheetPdf({ query: { date: filterDate } }).url, '_blank');
+        window.open(reports.balanceSheetPdf({ query: { date: filterDate, ...batchQuery } }).url, '_blank');
     }
 
     return (
@@ -78,6 +86,12 @@ export default function BalanceSheet({
                                 className="h-8 w-36 border-0 p-0 focus-visible:ring-0"
                             />
                         </div>
+                        <BatchFilter
+                            batches={batches}
+                            value={preOrderId}
+                            url={reports.balanceSheet().url}
+                            extraQuery={{ date: filterDate }}
+                        />
                         <Button onClick={handleFilter}>Terapkan</Button>
                         <Button variant="outline" size="icon" onClick={handlePrint}>
                             <Printer className="h-4 w-4" />

@@ -1,4 +1,6 @@
 import { Head, usePage } from '@inertiajs/react';
+import { BatchFilter, type BatchOption } from '@/components/batch-filter';
+import { index } from '@/actions/App/Http/Controllers/KasController';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table';
@@ -24,7 +26,7 @@ interface Metrics {
     saldoSaatIni: number;
 }
 
-export default function KasIndex({ transactions, metrics }: { transactions: KasType[], metrics: Metrics }) {
+export default function KasIndex({ transactions, metrics, batches = [], filters }: { transactions: KasType[], metrics: Metrics, batches?: BatchOption[], filters?: { pre_order_id?: string | number | null } }) {
     const { flash } = usePage().props as any;
 
     useEffect(() => {
@@ -110,7 +112,16 @@ export default function KasIndex({ transactions, metrics }: { transactions: KasT
 
                 {/* Filter Controls */}
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 bg-muted/30 p-3 sm:p-4 rounded-2xl border">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 w-full">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 w-full">
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[11px] font-bold text-muted-foreground">Batch Pre-Order</label>
+                            <BatchFilter
+                                batches={batches}
+                                value={filters?.pre_order_id}
+                                url={index().url}
+                                className="h-9 w-full rounded-xl bg-card text-xs"
+                            />
+                        </div>
                         <div className="grid grid-cols-2 gap-2 sm:col-span-2">
                             <div className="flex flex-col gap-1">
                                 <label className="text-[11px] font-bold text-muted-foreground">Dari Tanggal</label>

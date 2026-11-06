@@ -58,7 +58,9 @@ class DashboardController extends Controller
         $kasTgl = "COALESCE(\"tanggal\", DATE(\"created_at\"))";
 
         // 1. Kas: satu query conditional aggregation untuk inflow/outflow/saldo
-        $kasAgregat = Kas::whereRaw("{$kasTgl} BETWEEN ? AND ?", [$startDate, $endDate])
+        $kasAgregat = Kas::query()
+            ->forPreOrder($preOrderId)
+            ->whereRaw("{$kasTgl} BETWEEN ? AND ?", [$startDate, $endDate])
             ->selectRaw(
                 "SUM(CASE WHEN \"masuk\" > 0 THEN \"masuk\" ELSE 0 END) as total_masuk,
                  SUM(CASE WHEN \"keluar\" > 0 THEN \"keluar\" ELSE 0 END) as total_keluar"
@@ -70,7 +72,9 @@ class DashboardController extends Controller
         $netCashFlow = $totalInflow - $totalOutflow;
 
         // Saldo kas sampai akhir periode (untuk neraca mini) — satu query
-        $kasSaldoAkhir = Kas::whereRaw("{$kasTgl} <= ?", [$endDate])
+        $kasSaldoAkhir = Kas::query()
+            ->forPreOrder($preOrderId)
+            ->whereRaw("{$kasTgl} <= ?", [$endDate])
             ->selectRaw(
                 "SUM(CASE WHEN \"masuk\" > 0 THEN \"masuk\" ELSE 0 END) -
                  SUM(CASE WHEN \"keluar\" > 0 THEN \"keluar\" ELSE 0 END) as saldo"
@@ -127,7 +131,9 @@ class DashboardController extends Controller
         }
 
         // 6. Arus kas harian — satu query GROUP BY (pakai COALESCE untuk tanggal NULL)
-        $dailyCashRaw = Kas::whereRaw("{$kasTgl} BETWEEN ? AND ?", [$startDate, $endDate])
+        $dailyCashRaw = Kas::query()
+            ->forPreOrder($preOrderId)
+            ->whereRaw("{$kasTgl} BETWEEN ? AND ?", [$startDate, $endDate])
             ->select($kasTgl . ' as tanggal',
                 DB::raw('SUM(CASE WHEN "masuk" > 0 THEN "masuk" ELSE 0 END) as total_masuk'),
                 DB::raw('SUM(CASE WHEN "keluar" > 0 THEN "keluar" ELSE 0 END) as total_keluar'))
@@ -151,7 +157,9 @@ class DashboardController extends Controller
         }
 
         // 7. Outflow breakdown — satu query
-        $outflowBreakdown = Kas::whereRaw("{$kasTgl} BETWEEN ? AND ?", [$startDate, $endDate])
+        $outflowBreakdown = Kas::query()
+            ->forPreOrder($preOrderId)
+            ->whereRaw("{$kasTgl} BETWEEN ? AND ?", [$startDate, $endDate])
             ->where('keluar', '>', 0)
             ->selectRaw('"sumber", SUM("keluar") as total')
             ->groupBy('sumber')
@@ -205,15 +213,20 @@ class DashboardController extends Controller
         $modal = (float) Modal::whereRaw("DATE(\"created_at\") <= ?", [$endDate])->sum('nominal');
 
         // Kumulatif pakai tanggal create_at (lebih cepat dari whereBetween tanggal)
-        $pendapatanKumulatif = (float) Penjualan::whereRaw("DATE(\"created_at\") <= ?", [$endDate])->sum('total');
+        $pendapatanKumulatif = (float) Penjualan::whereRaw("DATE(\"created_at\") <= ?", [$endDate])
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->sum('total');
 
         $hppKumulatif = (float) DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
             ->whereRaw("DATE(\"penjualans\".\"created_at\") <= ?", [$endDate])
+            ->when($preOrderId, fn ($q) => $q->where('penjualans.pre_order_id', $preOrderId))
             ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
 
-        $operasionalKumulatif = (float) PengeluaranOperasional::where('tanggal', '<=', $endDate)->sum('nominal');
+        $operasionalKumulatif = (float) PengeluaranOperasional::where('tanggal', '<=', $endDate)
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->sum('nominal');
 
         $labaDitahan = (float) ($pendapatanKumulatif - $hppKumulatif - $operasionalKumulatif);
         $totalEkuitas = $modal + $labaDitahan;

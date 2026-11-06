@@ -11,6 +11,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { BatchFilter, type BatchOption } from '@/components/batch-filter';
 import { formatRupiah, formatRupiahCompact } from '@/lib/utils';
 import {
     Wallet,
@@ -141,6 +142,8 @@ interface Props {
     startDate: string;
     endDate: string;
     timelineTemplate: '30_days' | 'week' | 'month' | 'year' | 'custom';
+    preOrderId?: string | number | null;
+    batches?: BatchOption[];
     metrics: MetricProps;
     incomeTrend: IncomeTrendProps[];
     cashFlowTrend: CashFlowTrendProps[];
@@ -161,6 +164,8 @@ export default function Dashboard({
     startDate: initialStartDate,
     endDate: initialEndDate,
     timelineTemplate: initialTemplate,
+    preOrderId,
+    batches = [],
     metrics,
     incomeTrend,
     cashFlowTrend,
@@ -180,11 +185,13 @@ export default function Dashboard({
     const [startDate, setStartDate] = useState(initialStartDate);
     const [endDate, setEndDate] = useState(initialEndDate);
 
+    const batchQuery = preOrderId ? { pre_order_id: preOrderId } : {};
+
     const handleTemplateChange = (val: '30_days' | 'week' | 'month' | 'year' | 'custom') => {
         setTemplate(val);
         if (val !== 'custom') {
             router.visit('/dashboard', {
-                data: { timeline_template: val },
+                data: { timeline_template: val, ...batchQuery },
                 preserveState: false,
             });
         }
@@ -192,7 +199,7 @@ export default function Dashboard({
 
     const handleApplyFilter = () => {
         router.visit('/dashboard', {
-            data: { timeline_template: 'custom', start_date: startDate, end_date: endDate },
+            data: { timeline_template: 'custom', start_date: startDate, end_date: endDate, ...batchQuery },
             preserveState: false,
         });
     };
@@ -347,6 +354,18 @@ export default function Dashboard({
                     </div>
 
                     <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full md:w-auto">
+                        <BatchFilter
+                            batches={batches}
+                            value={preOrderId}
+                            url="/dashboard"
+                            extraQuery={{
+                                timeline_template: template,
+                                ...(template === 'custom'
+                                    ? { start_date: startDate, end_date: endDate }
+                                    : {}),
+                            }}
+                            className="h-10 w-full rounded-xl bg-card sm:w-52"
+                        />
                         <div className="w-full sm:w-48">
                             <Select value={template} onValueChange={(val: any) => handleTemplateChange(val)}>
                                 <SelectTrigger className="h-10 bg-card rounded-xl w-full">
