@@ -50,6 +50,8 @@ interface Balance {
     email?: string | null;
     dibayar: number;
     bagian: number;
+    dana_pribadi_masuk: number;
+    dana_pribadi_keluar: number;
     transfer_keluar: number;
     transfer_masuk: number;
     saldo: number;
@@ -416,6 +418,14 @@ export default function SplitBillIndex({
                                     </div>
                                     <div className="flex justify-between border-b pb-2 text-xs">
                                         <span className="text-muted-foreground">
+                                            Dana Pribadi (Setor − Tarik):
+                                        </span>
+                                        <span className="font-semibold text-foreground">
+                                            {formatRupiah(b.dana_pribadi_masuk - b.dana_pribadi_keluar)}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between border-b pb-2 text-xs">
+                                        <span className="text-muted-foreground">
                                             Sudah Dibayarkan ke Partner:
                                         </span>
                                         <span className="font-semibold text-foreground">
@@ -669,7 +679,7 @@ export default function SplitBillIndex({
                                 <Input
                                     type="number"
                                     min="0"
-                                    step="0.01"
+                                    step="any"
                                     value={form.data.nominal}
                                     onChange={(e) =>
                                         form.setData('nominal', e.target.value)

@@ -2,12 +2,19 @@
 
 namespace App\Services;
 
+use App\Models\Kas;
 use App\Models\Mitra;
 use App\Models\MitraTransfer;
 use App\Models\Pembelian;
 use App\Models\PengeluaranOperasional;
 use App\Models\SplitTagihan;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Semua perhitungan dipindah ke agregasi SQL ringkas (indexed SUM/GROUP BY).
+ * Tidak ada lagi loop per-mitra yang menembak query satu per satu (N+1),
+ * penyebab utama timeout 30 detik saat Vercel → Supabase.
+ */
 class SplitBillService
 {
     public function createForPembelian(Pembelian $pembelian): void
@@ -87,8 +94,95 @@ class SplitBillService
     }
 
     /**
+     * Baca saja info mitra (N, W, F) dalam skin SELEKTIF:
+     * hanya SELECT mitra + user, tanpa menulis apa pun ke database.
+     */
+    private function mitrasWithUsers()
+    {
+        Mitra::ensureTrio();
+
+        return Mitra::with('user:id,name,email')->orderBy('kode')->get();
+    }
+
+    /**
+     * Siapa menalangi apa: 3–4 query GROUP BY menghitung total yang
+     * ditanggung/terutang setiap partner dari pembelian (belanja),
+     * pengeluaran operasional bersama, bagian patungan, dan kas dana pribadi.
+     *
+     * @return array<int, array{total_belanja?:float, total_operasional?:float, total_bagian_patungan?:float, dana_pribadi_masuk?:float, dana_pribadi_keluar?:float}>
+     */
+    private function partnerFlowSums(?int $preOrderId = null): array
+    {
+        $rows = [];
+
+        // 1. Belanja ditalangi partner (pembelian.mitra_id)
+        $belanja = Pembelian::query()
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->groupBy('mitra_id')
+            ->select('mitra_id', DB::raw('SUM("total") as total'))
+            ->pluck('total', 'mitra_id');
+
+        foreach ($belanja as $mitraId => $total) {
+            $rows[(int) $mitraId]['total_belanja'] = (float) $total;
+        }
+
+        // 2. Biaya operasional yang ditanggung partner
+        $operasionals = PengeluaranOperasional::query()
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->whereNotNull('mitra_id')
+            ->groupBy('mitra_id')
+            ->select('mitra_id', DB::raw('SUM("nominal") as total'))
+            ->pluck('total', 'mitra_id');
+
+        foreach ($operasionals as $mitraId => $total) {
+            $rows[(int) $mitraId]['total_operasional'] = (float) $total;
+        }
+
+        // 3. Bagian patungan per partner (split_tagihans — parent punya pre_order_id,
+        //    jadi filter lewat COALESCE kedua parent tanpa whereHas berlapis)
+        $parentPreOrder = $preOrderId
+            ? "COALESCE(pb.\"pre_order_id\", po.\"pre_order_id\") = {$preOrderId}"
+            : '1 = 1';
+
+        $splitRows = DB::table('split_tagihans as st')
+            ->leftJoin('pembelians as pb', 'pb.id', '=', 'st.pembelian_id')
+            ->leftJoin('pengeluaran_operasionals as po', 'po.id', '=', 'st.pengeluaran_operasional_id')
+            ->whereRaw("COALESCE(pb.id, po.id) IS NOT NULL AND {$parentPreOrder}")
+            ->groupBy('st.mitra_id')
+            ->select('st.mitra_id', DB::raw('SUM(st.bagian) as total'))
+            ->get();
+
+        foreach ($splitRows as $row) {
+            $rows[(int) $row->mitra_id]['total_bagian_patungan'] = (float) $row->total;
+        }
+
+        // 4. Arus kas dana pribadi partner (penyesuaian kas manual sumber 'pribadi'):
+        //    setoran pribadi (masuk) menambah "dana talangan", penarikan (keluar) mengurangi.
+        //    Baris penyesuaian manual tidak punya tautan batch, jadi hanya dihitung
+        //    di tampilan global (tanpa filter batch).
+        if (! $preOrderId) {
+            $kasPribadi = Kas::query()
+                ->where('sumber_dana', 'pribadi')
+                ->whereNotNull('mitra_id')
+                ->groupBy('mitra_id')
+                ->selectRaw('"mitra_id",
+                    SUM(CASE WHEN "masuk" > 0 THEN "masuk" ELSE 0 END) as total_masuk,
+                    SUM(CASE WHEN "keluar" > 0 THEN "keluar" ELSE 0 END) as total_keluar')
+                ->get();
+
+            foreach ($kasPribadi as $row) {
+                $rows[(int) $row->mitra_id]['dana_pribadi_masuk'] = (float) $row->total_masuk;
+                $rows[(int) $row->mitra_id]['dana_pribadi_keluar'] = (float) $row->total_keluar;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
      * Matriks tunggakan antar partner: berapa yang harus dibayar setiap member
-     * ke member lain, berdasarkan split tagihan yang belum lunas.
+     * ke member lain, berdasarkan split tagihan yang belum lunas — mencakup
+     * SEMUA arus: pembelian (belanja ditalangi) DAN pengeluaran operasional bersama.
      *
      * @return array{
      *     mitras: array<int,array{id:int,nama:string,kode:string}>,
@@ -100,13 +194,10 @@ class SplitBillService
      */
     public function memberObligations(?int $preOrderId = null): array
     {
-        Mitra::ensureTrio();
-        $mitras = Mitra::orderBy('kode')->get();
+        $mitras = $this->mitrasWithUsers();
         $ids = $mitras->pluck('id')->all();
 
-        $matrix = [];
-        $totalByDebtor = [];
-        $totalByCreditor = [];
+        $matrix = $totalByDebtor = $totalByCreditor = [];
         foreach ($ids as $debtor) {
             $matrix[$debtor] = array_combine($ids, array_fill(0, count($ids), 0.0));
             $totalByDebtor[$debtor] = 0.0;
@@ -115,23 +206,29 @@ class SplitBillService
             $totalByCreditor[$creditor] = 0.0;
         }
 
-        $query = SplitTagihan::where('status', 'belum_lunas')
-            ->whereNotNull('pembelian_id')
-            ->with(['mitra', 'pembelian.mitra']);
+        // Satu query: pasangan (yang utang → yang menalangi) dari SEMUA jenis split.
+        $rows = DB::table('split_tagihans as st')
+            ->leftJoin('pembelians as pb', 'pb.id', '=', 'st.pembelian_id')
+            ->leftJoin('pengeluaran_operasionals as po', 'po.id', '=', 'st.pengeluaran_operasional_id')
+            ->where('st.status', 'belum_lunas')
+            ->whereRaw('COALESCE(pb."mitra_id", po."mitra_id") IS NOT NULL')
+            ->when($preOrderId, fn ($q) => $q->whereRaw(
+                'COALESCE(pb."pre_order_id", po."pre_order_id") = ?',
+                [$preOrderId]
+            ))
+            ->groupBy('st.mitra_id', 'creditor')
+            ->selectRaw('st."mitra_id" as debtor, COALESCE(pb."mitra_id", po."mitra_id") as creditor, SUM(st."bagian") as total')
+            ->get();
 
-        if ($preOrderId) {
-            $query->whereHas('pembelian', fn ($sq) => $sq->where('pre_order_id', $preOrderId));
-        }
-
-        foreach ($query->get() as $tagihan) {
-            $debtor = $tagihan->mitra_id;
-            $creditor = $tagihan->pembelian->mitra_id;
-            if (!$debtor || !$creditor || $debtor === $creditor) {
+        foreach ($rows as $row) {
+            $debtor = (int) $row->debtor;
+            $creditor = (int) $row->creditor;
+            if ($debtor === $creditor) {
                 continue;
             }
-            $matrix[$debtor][$creditor] += (float) $tagihan->bagian;
-            $totalByDebtor[$debtor] += (float) $tagihan->bagian;
-            $totalByCreditor[$creditor] += (float) $tagihan->bagian;
+            $matrix[$debtor][$creditor] += (float) $row->total;
+            $totalByDebtor[$debtor] += (float) $row->total;
+            $totalByCreditor[$creditor] += (float) $row->total;
         }
 
         return [
@@ -144,38 +241,33 @@ class SplitBillService
     }
 
     /**
-     * @return array<int, array{id:int,nama:string,kode:string,user_id:?int,email:?string,dibayar:float,bagian:float,transfer_keluar:float,transfer_masuk:float,saldo:float}>
+     * @return array<int, array{id:int,nama:string,kode:string,user_id:?int,email:?string,dibayar:float,bagian:float,dana_pribadi_masuk:float,dana_pribadi_keluar:float,transfer_keluar:float,transfer_masuk:float,saldo:float}>
      */
     public function balances(?int $preOrderId = null): array
     {
-        Mitra::ensureTrio();
+        $mitras = $this->mitrasWithUsers();
 
-        return Mitra::with('user')->orderBy('kode')->get()->map(function (Mitra $mitra) use ($preOrderId) {
-            $pembelianQuery = $mitra->pembelians();
-            $operasionalQuery = PengeluaranOperasional::where('mitra_id', $mitra->id);
+        $flows = $this->partnerFlowSums($preOrderId);
 
-            $splitQuery = $mitra->splitTagihans();
+        // Transfer antar partner: satu query UNION untuk dua arah sekaligus.
+        $transferPairs = DB::table('mitra_transfers')
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->get(['dari_mitra_id', 'ke_mitra_id', 'nominal']);
+        $transferOut = $transferIn = [];
+        foreach ($transferPairs as $t) {
+            $transferOut[(int) $t->dari_mitra_id] = ($transferOut[(int) $t->dari_mitra_id] ?? 0) + (float) $t->nominal;
+            $transferIn[(int) $t->ke_mitra_id] = ($transferIn[(int) $t->ke_mitra_id] ?? 0) + (float) $t->nominal;
+        }
 
-            if ($preOrderId) {
-                $pembelianQuery->where('pre_order_id', $preOrderId);
-                $operasionalQuery->where('pre_order_id', $preOrderId);
-                $splitQuery->where(function ($q) use ($preOrderId) {
-                    $q->whereHas('pembelian', fn ($sq) => $sq->where('pre_order_id', $preOrderId))
-                        ->orWhereHas('pengeluaranOperasional', fn ($sq) => $sq->where('pre_order_id', $preOrderId));
-                });
-            }
+        return $mitras->map(function (Mitra $mitra) use ($flows, $transferOut, $transferIn) {
+            $flow = $flows[$mitra->id] ?? [];
 
-            $dibayar = (float) $pembelianQuery->sum('total') + (float) $operasionalQuery->sum('nominal');
-            $bagian = (float) $splitQuery->sum('bagian');
-
-            $transferKeluarQuery = MitraTransfer::where('dari_mitra_id', $mitra->id);
-            $transferMasukQuery = MitraTransfer::where('ke_mitra_id', $mitra->id);
-            if ($preOrderId) {
-                $transferKeluarQuery->where('pre_order_id', $preOrderId);
-                $transferMasukQuery->where('pre_order_id', $preOrderId);
-            }
-            $transferKeluar = (float) $transferKeluarQuery->sum('nominal');
-            $transferMasuk = (float) $transferMasukQuery->sum('nominal');
+            $dibayar = (float) ($flow['total_belanja'] ?? 0) + (float) ($flow['total_operasional'] ?? 0);
+            $bagian = (float) ($flow['total_bagian_patungan'] ?? 0);
+            $transferKeluar = (float) ($transferOut[$mitra->id] ?? 0);
+            $transferMasuk = (float) ($transferIn[$mitra->id] ?? 0);
+            $danaPribadiMasuk = (float) ($flow['dana_pribadi_masuk'] ?? 0);
+            $danaPribadiKeluar = (float) ($flow['dana_pribadi_keluar'] ?? 0);
 
             return [
                 'id' => $mitra->id,
@@ -185,9 +277,14 @@ class SplitBillService
                 'email' => $mitra->user?->email,
                 'dibayar' => $dibayar,
                 'bagian' => $bagian,
+                'dana_pribadi_masuk' => $danaPribadiMasuk,
+                'dana_pribadi_keluar' => $danaPribadiKeluar,
                 'transfer_keluar' => $transferKeluar,
                 'transfer_masuk' => $transferMasuk,
-                'saldo' => $dibayar - $bagian + $transferMasuk - $transferKeluar,
+                // saldo mensintesiskan SEMUA arus partner: belanja ditalangi,
+                // bagian patungan, kas dana pribadi, dan transfer antar partner.
+                'saldo' => $dibayar + $danaPribadiMasuk - $danaPribadiKeluar
+                    - $bagian + $transferMasuk - $transferKeluar,
             ];
         })->all();
     }

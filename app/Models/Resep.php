@@ -11,6 +11,10 @@ class Resep extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'qty' => 'decimal:3',
+    ];
+
     public function produk(): BelongsTo
     {
         return $this->belongsTo(Produk::class);

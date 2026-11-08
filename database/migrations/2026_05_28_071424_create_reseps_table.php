@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('produk_id')->constrained()->onDelete('cascade');
             $table->foreignId('bahan_baku_id')->constrained()->onDelete('cascade');
-            $table->integer('qty');
+            $table->decimal('qty', 12, 3); // qty resep boleh koma
             $table->timestamps();
         });
     }

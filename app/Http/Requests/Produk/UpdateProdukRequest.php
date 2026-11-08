@@ -27,11 +27,11 @@ class UpdateProdukRequest extends FormRequest
             'nama_produk' => 'required|string|min:3|max:100',
             'stok' => 'nullable|numeric|min:0',
             'satuan'=> 'required|string',
-            'hpp' => 'required|numeric|min:0',
+            'hpp' => 'nullable|numeric|min:0', // selalu dihitung ulang dari resep di controller
             'harga_jual' => 'required|numeric|min:0',
             'recipe' => 'required|array|min:1',
             'recipe.*.bahan_baku_id' => 'required|exists:bahan_bakus,id',
-            'recipe.*.qty' => 'required|integer|min:1',
+            'recipe.*.qty' => 'required|numeric|min:0.001', // boleh koma
         ];
     }
 }

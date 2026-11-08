@@ -182,7 +182,7 @@ export function PeralatanForm({
                         <Input
                             id="persentase_penyusutan"
                             type="number"
-                            step="0.01"
+                            step="any"
                             placeholder="Contoh: 0.42"
                             value={form.data.persentase_penyusutan}
                             onChange={(e) =>

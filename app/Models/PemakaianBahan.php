@@ -11,6 +11,10 @@ class PemakaianBahan extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'qty_bahan_dipakai' => 'decimal:3',
+    ];
+
     public function produksi(): BelongsTo
     {
         return $this->belongsTo(Produksi::class);

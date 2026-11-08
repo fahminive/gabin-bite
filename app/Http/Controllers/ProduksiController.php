@@ -99,7 +99,7 @@ class ProduksiController extends Controller
             'keterangan' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.bahan_baku_id' => 'required|exists:bahan_bakus,id',
-            'items.*.qty_bahan_dipakai' => 'required|integer|min:1',
+            'items.*.qty_bahan_dipakai' => 'required|numeric|min:0.001', // dari qty resep, boleh koma
         ]);
 
         // --- VALIDASI STOK BAHAN BAKU SEBELUM TRANSAKSI ---
@@ -173,7 +173,7 @@ class ProduksiController extends Controller
                 'nama_bahan'   => $row->bahanBaku?->nama_bahan,
                 'kode_bahan'   => $row->bahanBaku?->kode,
                 'satuan'       => $row->bahanBaku?->satuan,
-                'qty_dipakai'  => (int) $row->qty_bahan_dipakai,
+                'qty_dipakai'  => (float) $row->qty_bahan_dipakai,
                 'stok_sekarang' => (float) ($row->bahanBaku?->stok ?? 0),
             ]),
         ]);

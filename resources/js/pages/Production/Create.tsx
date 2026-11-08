@@ -77,7 +77,10 @@ export default function ProductionCreate({ products, bahanBakus, recipes }: Prop
         if (productRecipes.length > 0) {
             const calculatedItems = productRecipes.map(r => ({
                 bahan_baku_id: String(r.bahan_baku_id),
-                qty_bahan_dipakai: String(r.qty * (Number(qtyHasil) || 1))
+                // Bulatkan ke 3 desimal agar hasil kali floating-point seperti
+                // 0.44999999999999996 tidak memicu validasi browser "The two
+                // nearest valid values are..."
+                qty_bahan_dipakai: String(Math.round(r.qty * (Number(qtyHasil) || 1) * 1000) / 1000)
             }));
             setItems(calculatedItems);
         }
@@ -253,7 +256,8 @@ export default function ProductionCreate({ products, bahanBakus, recipes }: Prop
                                                 <td className="py-2 pr-2">
                                                     <Input
                                                         type="number"
-                                                        min="1"
+                                                        min="0.001"
+                                                        step="any"
                                                         placeholder="0"
                                                         value={item.qty_bahan_dipakai}
                                                         onChange={e => updateItem(index, 'qty_bahan_dipakai', e.target.value)}

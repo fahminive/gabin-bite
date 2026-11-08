@@ -40,6 +40,7 @@ class ProdukController extends Controller
     public function store(StoreProdukRequest $request) {
         $data = $request->validated();
         $data['stok'] = $data['stok'] ?? 0; // Set default 0 jika kosong
+        $data['hpp'] = $this->hitungHppDariResep($data['recipe']); // HPP real-time dari resep
 
         DB::transaction(function () use ($data) {
             $product = Produk::create([
@@ -73,6 +74,7 @@ class ProdukController extends Controller
     public function update(UpdateProdukRequest $request, Produk $product) {
         $data = $request->validated();
         unset($data['stok']); // Cegah update stok dari form edit
+        $data['hpp'] = $this->hitungHppDariResep($data['recipe']); // HPP real-time dari resep
 
         DB::transaction(function () use ($product, $data) {
             $product->update([
@@ -99,6 +101,20 @@ class ProdukController extends Controller
     public function destroy(Produk $product) {
         $product->delete();
         return redirect()->route('products.index')->with('success', 'Produk berhasil dihapus.');
+    }
+
+    /**
+     * HPP = total biaya bahan resep (qty bisa koma) = SUM(qty_resep × harga_satuan bahan).
+     * Satu query ringan ke bahan_bakus, input 'hpp' dari user selalu diabaikan.
+     */
+    private function hitungHppDariResep(array $recipe): float
+    {
+        $hargaBahan = BahanBaku::whereIn('id', collect($recipe)->pluck('bahan_baku_id'))
+            ->pluck('harga_satuan', 'id');
+
+        return round(collect($recipe)->sum(
+            fn ($item) => (float) ($hargaBahan[$item['bahan_baku_id']] ?? 0) * (float) $item['qty']
+        ), 2);
     }
 }
 

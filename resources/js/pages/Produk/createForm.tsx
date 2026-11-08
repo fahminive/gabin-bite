@@ -74,26 +74,24 @@ export function ProdukForm({
         })) || [{ bahan_baku_id: "", qty: "" }] as FormRecipeItem[]
     })
 
-    const [isHppManual, setIsHppManual] = useState(isEdit); // if edit, assume manual to avoid overwrite
-
-    // --- AUTO CALCULATE HPP ---
-    useEffect(() => {
-        if (isHppManual) return; // Skip if user explicitly typed it
-
-        let totalCost = 0;
-        form.data.recipe.forEach(item => {
-            if (item.bahan_baku_id && item.qty) {
-                const bb = bahanBakus.find(b => String(b.id) === String(item.bahan_baku_id));
-                if (bb && bb.harga_satuan) {
-                    totalCost += Number(item.qty) * Number(bb.harga_satuan);
-                }
+    // --- AUTO CALCULATE HPP (selalu real-time, create & update) ---
+    const hppTerkalkulasi = form.data.recipe.reduce((total, item) => {
+        if (item.bahan_baku_id && item.qty) {
+            const bb = bahanBakus.find(b => String(b.id) === String(item.bahan_baku_id));
+            if (bb && bb.harga_satuan) {
+                return total + Number(item.qty) * Number(bb.harga_satuan);
             }
-        });
-
-        if (totalCost > 0 && String(totalCost) !== form.data.hpp) {
-            form.setData('hpp', String(totalCost));
         }
-    }, [form.data.recipe, bahanBakus, isHppManual, form.data.hpp]);
+        return total;
+    }, 0);
+
+    useEffect(() => {
+        const hppStr = String(hppTerkalkulasi);
+        if (hppTerkalkulasi > 0 && hppStr !== form.data.hpp) {
+            form.setData('hpp', hppStr);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hppTerkalkulasi]);
     // --------------------------
 
     function addRecipeItem() {
@@ -204,13 +202,11 @@ export function ProdukForm({
                             id="hpp"
                             type="number"
                             value={form.data.hpp}
-                            onChange={(e) => {
-                                setIsHppManual(true);
-                                form.setData("hpp", e.target.value);
-                            }}
+                            readOnly
+                            className="bg-muted/50 cursor-not-allowed"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
-                            Biaya modal untuk memproduksi 1 satuan produk. { !isHppManual && "Dihitung otomatis dari resep." }
+                            Dihitung otomatis dari resep (qty bahan × harga bahan).
                         </p>
                         {form.errors.hpp && (
                             <FieldError>
@@ -308,7 +304,8 @@ export function ProdukForm({
                                             <td className="py-2 pr-2">
                                                 <Input
                                                     type="number"
-                                                    min="1"
+                                                    min="0.001"
+                                                    step="any"
                                                     placeholder="0"
                                                     value={item.qty}
                                                     onChange={e => updateRecipeItem(index, 'qty', e.target.value)}

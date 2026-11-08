@@ -43,11 +43,16 @@ class Mitra extends Model
             );
 
             $mitra = static::firstOrNew(['kode' => $partner['kode']]);
+            // Tulis ke database hanya jika benar-benar berubah, supaya request
+            // halaman tidak selalu menimbangkan UPDATE ke mitras/users.
             if (! $mitra->exists) {
                 $mitra->nama = $partner['nama'];
+                $mitra->user_id = $user->id;
+                $mitra->save();
+            } elseif ((int) $mitra->user_id !== (int) $user->id) {
+                $mitra->user_id = $user->id;
+                $mitra->save();
             }
-            $mitra->user_id = $user->id;
-            $mitra->save();
         }
     }
 }

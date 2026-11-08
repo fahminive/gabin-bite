@@ -118,7 +118,7 @@ export function BahanBakuForm({ bahanBaku, defaultKode }: Props) {
                         <Input
                             id="netto_pcs"
                             type="number"
-                            step="0.01"
+                            step="any"
                             placeholder="Contoh: 250 gram atau 250 ml per bungkus"
                             value={form.data.netto_pcs}
                             onChange={(e) =>
@@ -142,6 +142,7 @@ export function BahanBakuForm({ bahanBaku, defaultKode }: Props) {
                         <Input
                             id="harga_satuan"
                             type="number"
+                            step="any"
                             value={form.data.harga_satuan}
                             onChange={(e) =>
                                 form.setData('harga_satuan', e.target.value)
