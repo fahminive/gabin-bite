@@ -54,26 +54,29 @@ interface ProductionCapacity {
     bahan_pembatas: BahanPembatas | null;
 }
 
-interface BahanGap {
-    nama: string;
-    satuan: string;
-    stok: number;
-    butuh: number;
-    kurang: number;
-}
-
 interface Props {
     productions: Produksi[];
     metrics: Metrics;
     productionNeeds: ProductionNeed[];
     productionCapacity: ProductionCapacity[];
-    bahanGap: BahanGap[];
+    mode: 'fokus' | 'semua';
     batches: BatchOption[];
     selectedBatchId: number | null;
 }
 
-export default function ProductionIndex({ productions, metrics, productionNeeds, productionCapacity, bahanGap, batches, selectedBatchId }: Props) {
+export default function ProductionIndex({ productions, metrics, productionNeeds, productionCapacity, mode, batches, selectedBatchId }: Props) {
     const { flash } = usePage().props as any;
+
+    const [kapasitasMode, setKapasitasMode] = useState<'fokus' | 'semua'>(mode === 'semua' ? 'semua' : 'fokus');
+
+    const gantiModeKapasitas = (newMode: 'fokus' | 'semua') => {
+        setKapasitasMode(newMode);
+        router.visit('/productions', {
+            data: { mode: newMode },
+            preserveScroll: true,
+            preserveState: true,
+        });
+    };
 
     useEffect(() => {
         if (flash?.success) {
@@ -180,101 +183,65 @@ export default function ProductionIndex({ productions, metrics, productionNeeds,
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0 space-y-3">
+                        {/* Filter mode hitung */}
+                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="inline-flex w-fit rounded-lg border bg-muted/40 p-0.5">
+                                <button
+                                    type="button"
+                                    onClick={() => gantiModeKapasitas('fokus')}
+                                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                        kapasitasMode === 'fokus'
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                                >
+                                    Fokus Varian
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => gantiModeKapasitas('semua')}
+                                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                        kapasitasMode === 'semua'
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                                >
+                                    Pakai Semua Bahan
+                                </button>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                                {kapasitasMode === 'fokus'
+                                    ? 'tiap varian dihitung dari stok penuh - maksimal bila dibikin sendiri'
+                                    : 'stok bahan dipotong berurutan per varian - simulasi produksi gabungan'}
+                            </span>
+                        </div>
+
                         {productionCapacity.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                                 Belum ada resep produk. Isi qty resep di halaman Produk untuk melihat estimasi.
                             </p>
                         ) : (
-                            <>
-                                <div className="flex flex-col divide-y">
-                                    {productionCapacity.map((cap) => (
-                                        <div key={cap.produk_id} className="flex flex-col gap-1 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                                            <span className="font-medium truncate">
-                                                {cap.nama_produk}
-                                                <span className="ml-1.5 text-xs text-muted-foreground">{cap.produk_kode}</span>
-                                            </span>
-                                            <div className="flex items-center gap-2">
-                                                {cap.bahan_pembatas && (
-                                                    <span className="text-xs text-muted-foreground truncate max-w-[180px] sm:max-w-[280px]">
-                                                        {cap.bahan_pembatas.nama}, sisa {cap.bahan_pembatas.sisa_stok} {cap.bahan_pembatas.satuan}
-                                                    </span>
-                                                )}
-                                                <Badge variant={cap.kapasitas > 0 ? 'secondary' : 'destructive'}
-                                                    className="shrink-0 text-xs font-bold">
-                                                    {cap.kapasitas} {cap.satuan ?? 'pcs'}
-                                                </Badge>
-                                            </div>
+                            <div className="flex flex-col divide-y">
+                                {productionCapacity.map((cap) => (
+                                    <div key={cap.produk_id} className="flex flex-col gap-1 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                                        <span className="font-medium truncate">
+                                            {cap.nama_produk}
+                                            <span className="ml-1.5 text-xs text-muted-foreground">{cap.produk_kode}</span>
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            {cap.bahan_pembatas && (
+                                                <span className="text-xs text-muted-foreground truncate max-w-[180px] sm:max-w-[280px]">
+                                                    {cap.bahan_pembatas.nama}, sisa {cap.bahan_pembatas.sisa_stok} {cap.bahan_pembatas.satuan}
+                                                </span>
+                                            )}
+                                            <Badge variant={cap.kapasitas > 0 ? 'secondary' : 'destructive'}
+                                                className="shrink-0 text-xs font-bold">
+                                                {cap.kapasitas} {cap.satuan ?? 'pcs'}
+                                            </Badge>
                                         </div>
-                                    ))}
-                                </div>
-
-                                {/* Peringatan: kebutuhan gabungan bisa melampaui stok */}
-                                {bahanGap.length > 0 && (
-                                    <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-3 text-xs text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200 sm:text-sm">
-                                        <p className="font-semibold">
-                                            Catatan bila semua varian dikerjakan bersamaan:
-                                        </p>
-                                        <ul className="mt-1.5 list-disc space-y-1 pl-5">
-                                            {bahanGap.map((gap) => (
-                                                <li key={gap.nama}>
-                                                    <strong>{gap.nama}</strong> butuh {gap.butuh} {gap.satuan},
-                                                    stok cuma {gap.stok} {gap.satuan} (kurang {gap.kurang} {gap.satuan}).
-                                                </li>
-                                            ))}
-                                        </ul>
-                                        <p className="mt-1.5">
-                                            Prioritaskan varian atau restok bahan dulu.
-                                        </p>
                                     </div>
-                                )}
-
-                                {/* Penjelasan cara hitung */}
-                                <div className="rounded-xl border bg-muted/30 px-3.5 py-3 text-xs text-muted-foreground sm:text-sm">
-                                    <details>
-                                        <summary className="cursor-pointer select-none font-semibold text-foreground">
-                                            Cara hitung estimasi ini (klik untuk detail)
-                                        </summary>
-                                        <div className="mt-2 space-y-2 leading-relaxed">
-                                            <p>
-                                                Tiap varian dihitung sendiri-sendiri dengan rumus{' '}
-                                                <span className="font-mono">floor(stok bahan dibagi qty resep)</span>,
-                                                lalu diambil <strong>nilai terkecil</strong> antar semua
-                                                bahan di resepnya. Angka terkecil itulah yang jadi
-                                                kapasitas varian, dan bahan penyebabnya ditampilkan
-                                                sebagai "batas".
-                                            </p>
-                                            <p>
-                                                Yang penting: <strong>stok bahan TIDAK dipotong</strong>{' '}
-                                                antar varian. Contoh: susu sisa 60, bahan A sisa 1,
-                                                bahan B sisa 3, bahan C sisa 1, dan tiap varian butuh
-                                                20 susu, maka:
-                                            </p>
-                                            <ul className="list-disc space-y-1 pl-5">
-                                                <li>
-                                                    Varian A = 1 (dibatasi bahan A: 1 dibagi 1; susu 60
-                                                    dibagi 20 = 3, diambil yang terkecil)
-                                                </li>
-                                                <li>
-                                                    Varian B = 3 (dibatasi bahan B: 3 dibagi 1; susu
-                                                    tetap dihitung dari 60, bukan sisa varian A)
-                                                </li>
-                                                <li>
-                                                    Varian C = 1 (dibatasi bahan C; susu lagi-lagi dari 60)
-                                                </li>
-                                            </ul>
-                                            <p>
-                                                Jadi angka per varian artinya{' '}
-                                                <em>"kalau fokus bikin varian ini saja, maksimal berapa"</em>{' '}
-                                                dan <strong>tidak boleh dijumlah</strong> antar varian.
-                                                Bila angkanya mau dikerjakan bersamaan, lihat catatan
-                                                kuning di atas: bahan yang dipakai beberapa varian
-                                                (seperti susu) dijumlahkan kebutuhannya dan bisa
-                                                melampaui stok.
-                                            </p>
-                                        </div>
-                                    </details>
-                                </div>
-                            </>
+                                ))}
+                            </div>
                         )}
                     </CardContent>
                 </Card>

@@ -69,86 +69,115 @@ class ProduksiController extends Controller
                 ->all();
         }
 
-        // Estimasi produksi: berapa bungkus tiap produk masih bisa dibuat
-        // dari stok bahan saat ini = MIN per bahan resep
-        // (floor(stok_bahan / qty_resep)). Bahan yang habis paling cepat
-        // ditampilkan sebagai pembatas.
+        // Estimasi produksi dengan DUA MODE:
+        //   fokus  : tiap varian dihitung independen dari stok penuh - berapa
+        //            maksimal bila fokus bikin varian itu saja.
+        //   semua  : varian dihitung berurutan (urut kode), stok bahan benar-
+        //            benar dipotong tiap varian - realistis utk produksi
+        //            gabungan. Bahan habis di tengah = varian berikutnya 0.
+        $mode = $request->input('mode', 'fokus') === 'semua' ? 'semua' : 'fokus';
+
         $bahanStok = BahanBaku::get()->keyBy('id');
         $recipes = DB::table('reseps')
             ->select('produk_id', 'bahan_baku_id', 'qty')
             ->get()
             ->groupBy('produk_id');
 
+        $produkList = Produk::orderBy('kode')->get(['id', 'kode', 'nama_produk', 'satuan']);
         $productionCapacity = [];
-        foreach (Produk::orderBy('kode')->get(['id', 'kode', 'nama_produk', 'satuan']) as $p) {
-            $resep = $recipes->get($p->id) ?? collect();
-            if ($resep->isEmpty()) {
-                continue;
-            }
+        $butuhGabungan = [];
 
-            $kapasitas = null;
-            $bahanPembatas = null;
-            foreach ($resep as $row) {
-                $bahan = $bahanStok->get($row->bahan_baku_id);
-                if (! $bahan || (float) $row->qty <= 0) {
+        if ($mode === 'fokus') {
+            foreach ($produkList as $p) {
+                $resep = $recipes->get($p->id) ?? collect();
+                if ($resep->isEmpty()) {
                     continue;
                 }
-                $max = floor((float) $bahan->stok / (float) $row->qty);
-                $kapasitas = $kapasitas === null ? $max : min($kapasitas, $max);
-                if ($bahanPembatas === null || $max < $bahanPembatas['max_tercapai']) {
-                    $bahanPembatas = [
-                        'nama' => $bahan->nama_bahan,
-                        'satuan' => $bahan->satuan,
-                        'sisa_stok' => (float) $bahan->stok,
-                        'max_tercapai' => $max,
+
+                $kapasitas = null;
+                $bahanPembatas = null;
+                foreach ($resep as $row) {
+                    $bahan = $bahanStok->get($row->bahan_baku_id);
+                    if (! $bahan || (float) $row->qty <= 0) {
+                        continue;
+                    }
+                    $max = floor((float) $bahan->stok / (float) $row->qty);
+                    $kapasitas = $kapasitas === null ? $max : min($kapasitas, $max);
+                    if ($bahanPembatas === null || $max < $bahanPembatas['max_tercapai']) {
+                        $bahanPembatas = [
+                            'nama' => $bahan->nama_bahan,
+                            'satuan' => $bahan->satuan,
+                            'sisa_stok' => (float) $bahan->stok,
+                            'max_tercapai' => $max,
+                        ];
+                    }
+                }
+
+                if ($kapasitas !== null) {
+                    $productionCapacity[] = [
+                        'produk_id' => $p->id,
+                        'produk_kode' => $p->kode,
+                        'nama_produk' => $p->nama_produk,
+                        'satuan' => $p->satuan,
+                        'kapasitas' => max($kapasitas, 0),
+                        'bahan_pembatas' => $bahanPembatas,
                     ];
                 }
             }
+        } else {
+            // Mode "semua": simulasi stok dipotong berurutan.
+            $stokSimulasi = $bahanStok->map(fn ($b) => (float) $b->stok);
 
-            if ($kapasitas !== null) {
+            foreach ($produkList as $p) {
+                $resep = $recipes->get($p->id) ?? collect();
+                if ($resep->isEmpty()) {
+                    continue;
+                }
+
+                // Kapasitas = berapa siklus resep yang bisa dibiayai stok sisa.
+                $kapasitas = null;
+                $bahanPembatas = null;
+                foreach ($resep as $row) {
+                    $bahan = $bahanStok->get($row->bahan_baku_id);
+                    if (! $bahan || (float) $row->qty <= 0) {
+                        continue;
+                    }
+                    $max = floor(($stokSimulasi[$row->bahan_baku_id] ?? 0) / (float) $row->qty);
+                    $kapasitas = $kapasitas === null ? $max : min($kapasitas, $max);
+                    if ($bahanPembatas === null || $max < $bahanPembatas['max_tercapai']) {
+                        $bahanPembatas = [
+                            'nama' => $bahan->nama_bahan,
+                            'satuan' => $bahan->satuan,
+                            'sisa_stok' => $stokSimulasi[$row->bahan_baku_id] ?? 0,
+                            'max_tercapai' => $max,
+                        ];
+                    }
+                }
+
+                $kapasitas = max($kapasitas ?? 0, 0);
+
+                // Potong stok simulasi sesuai kebutuhan varian ini.
+                foreach ($resep as $row) {
+                    $key = $row->bahan_baku_id;
+                    if (! isset($stokSimulasi[$key])) {
+                        continue;
+                    }
+                    $stokSimulasi[$key] = max(
+                        $stokSimulasi[$key] - ((float) $row->qty * $kapasitas),
+                        0,
+                    );
+                }
+
                 $productionCapacity[] = [
                     'produk_id' => $p->id,
                     'produk_kode' => $p->kode,
                     'nama_produk' => $p->nama_produk,
                     'satuan' => $p->satuan,
-                    'kapasitas' => max($kapasitas, 0),
+                    'kapasitas' => $kapasitas,
                     'bahan_pembatas' => $bahanPembatas,
                 ];
             }
-
-            // Rekap kebutuhan bahan bila SEMUA estimasi dikerjakan bersamaan.
-            // Kapasitas per varian dihitung independen dari stok penuh, jadi
-            // jumlahnya bisa melampaui stok - di sini dihitung selisihnya
-            // sebagai peringatan.
-            foreach ($resep as $row) {
-                if (! $bahanStok->has($row->bahan_baku_id) || (float) $row->qty <= 0) {
-                    continue;
-                }
-                $bahan = $bahanStok->get($row->bahan_baku_id);
-                $butuh = (float) $row->qty * (float) max($kapasitas, 0);
-                $key = (int) $row->bahan_baku_id;
-                $butuhGabungan[$key] = [
-                    'nama' => $bahan->nama_bahan,
-                    'satuan' => $bahan->satuan,
-                    'stok' => (float) $bahan->stok,
-                    'butuh' => ($butuhGabungan[$key]['butuh'] ?? 0) + $butuh,
-                ];
-            }
         }
-
-        // Hanya bahan yang akan kurang bila semua estimasi digarap sekaligus.
-        $bahanGap = collect($butuhGabungan ?? [])
-            ->filter(fn ($row) => $row['butuh'] > $row['stok'])
-            ->map(fn ($row) => [
-                'nama' => $row['nama'],
-                'satuan' => $row['satuan'],
-                'stok' => $row['stok'],
-                'butuh' => round($row['butuh'], 3),
-                'kurang' => round($row['butuh'] - $row['stok'], 3),
-            ])
-            ->sortByDesc('kurang')
-            ->values()
-            ->all();
 
         return Inertia::render('Production/Index', [
             'productions' => $productions,
@@ -158,7 +187,7 @@ class ProduksiController extends Controller
             ],
             'productionNeeds' => $productionNeeds,
             'productionCapacity' => $productionCapacity,
-            'bahanGap' => $bahanGap,
+            'mode' => $mode,
             'batches' => $batches,
             'selectedBatchId' => $selectedBatchId,
         ]);
