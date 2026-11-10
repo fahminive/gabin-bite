@@ -15,6 +15,17 @@ import { Input } from '@/components/ui/input';
 import { BatchFilter, type BatchOption } from '@/components/batch-filter';
 import { formatRupiah } from '@/lib/utils';
 
+interface VarianRow {
+    produk_id: number;
+    kode: string;
+    nama_produk: string;
+    satuan: string;
+    qty_terjual: number;
+    pendapatan: number;
+    hpp: number;
+    harga_rata: number;
+}
+
 interface Props {
     startDate: string;
     endDate: string;
@@ -22,12 +33,13 @@ interface Props {
     batches?: BatchOption[];
     pendapatan: number;
     hpp: number;
-    labaKotor: number;
-    operasional: number;
-    operasionalDetail: {
+    hppDetail: {
         koreksiStokLoss: number;
         koreksiStokGain: number;
+        perVarian: VarianRow[];
     };
+    labaKotor: number;
+    operasional: number;
     labaBersihSebelumPajak: number;
     bebanPajak: number;
     labaBersih: number;
@@ -47,9 +59,9 @@ export default function IncomeStatement({
     batches = [],
     pendapatan,
     hpp,
+    hppDetail,
     labaKotor,
     operasional,
-    operasionalDetail,
     labaBersihSebelumPajak,
     bebanPajak,
     labaBersih,
@@ -81,6 +93,9 @@ export default function IncomeStatement({
         );
     }
 
+    const perVarian = hppDetail?.perVarian ?? [];
+    const nfQty = (v: number) =>
+        new Intl.NumberFormat('id-ID', { maximumFractionDigits: 3 }).format(v);
     const marginKotor = pendapatan > 0 ? (labaKotor / pendapatan) * 100 : 0;
     const marginBersih = pendapatan > 0 ? (labaBersih / pendapatan) * 100 : 0;
 
@@ -323,16 +338,51 @@ export default function IncomeStatement({
                                     {formatRupiah(pendapatan)}
                                 </span>
                             </div>
+                            {perVarian.length > 0 && (
+                                <div className="overflow-x-auto rounded-lg border bg-muted/20">
+                                    <table className="w-full min-w-[480px] text-xs">
+                                        <thead>
+                                            <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                                                <th className="px-3 py-1.5 font-semibold">Varian</th>
+                                                <th className="px-3 py-1.5 text-right font-semibold">Qty</th>
+                                                <th className="px-3 py-1.5 text-right font-semibold">Harga Rata</th>
+                                                <th className="px-3 py-1.5 text-right font-semibold">Pendapatan</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {perVarian.map((v) => (
+                                                <tr key={v.produk_id}>
+                                                    <td className="px-3 py-1.5">
+                                                        {v.nama_produk}
+                                                        <span className="ml-1.5 text-[10px] text-muted-foreground">
+                                                            {v.kode}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-1.5 text-right font-semibold">
+                                                        {nfQty(v.qty_terjual)} {v.satuan}
+                                                    </td>
+                                                    <td className="px-3 py-1.5 text-right">
+                                                        {formatRupiah(v.harga_rata)}
+                                                    </td>
+                                                    <td className="px-3 py-1.5 text-right font-semibold">
+                                                        {formatRupiah(v.pendapatan)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                             <div className="flex items-center justify-between rounded bg-muted/30 p-2 text-sm font-bold">
                                 <span>Total Pendapatan</span>
                                 <span>{formatRupiah(pendapatan)}</span>
                             </div>
                         </div>
 
-                        {/* HARGA POKOK PENJUALAN */}
+                        {/* BEBAN HPP */}
                         <div className="space-y-2">
                             <div className="flex justify-between text-sm font-bold tracking-wider text-muted-foreground uppercase">
-                                <span>Harga Pokok Penjualan (HPP)</span>
+                                <span>Beban HPP</span>
                             </div>
                             <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
                                 <span>Beban HPP Produk Terjual</span>
@@ -340,8 +390,43 @@ export default function IncomeStatement({
                                     ({formatRupiah(hpp)})
                                 </span>
                             </div>
+                            {perVarian.length > 0 && (
+                                <div className="overflow-x-auto rounded-lg border bg-muted/20">
+                                    <table className="w-full min-w-[480px] text-xs">
+                                        <thead>
+                                            <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                                                <th className="px-3 py-1.5 font-semibold">Varian</th>
+                                                <th className="px-3 py-1.5 text-right font-semibold">Qty</th>
+                                                <th className="px-3 py-1.5 text-right font-semibold">HPP Satuan</th>
+                                                <th className="px-3 py-1.5 text-right font-semibold">Beban HPP</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {perVarian.map((v) => (
+                                                <tr key={v.produk_id}>
+                                                    <td className="px-3 py-1.5">
+                                                        {v.nama_produk}
+                                                        <span className="ml-1.5 text-[10px] text-muted-foreground">
+                                                            {v.kode}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-1.5 text-right font-semibold">
+                                                        {nfQty(v.qty_terjual)} {v.satuan}
+                                                    </td>
+                                                    <td className="px-3 py-1.5 text-right">
+                                                        {formatRupiah(v.hpp / Math.max(v.qty_terjual, 1))}
+                                                    </td>
+                                                    <td className="px-3 py-1.5 text-right font-semibold text-destructive">
+                                                        ({formatRupiah(v.hpp)})
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                             <div className="flex items-center justify-between rounded bg-muted/30 p-2 text-sm font-bold">
-                                <span>Total HPP</span>
+                                <span>Total Beban HPP</span>
                                 <span>({formatRupiah(hpp)})</span>
                             </div>
                         </div>
@@ -352,38 +437,35 @@ export default function IncomeStatement({
                             <span>{formatRupiah(labaKotor)}</span>
                         </div>
 
-                        {/* BEBAN OPERASIONAL */}
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm font-bold tracking-wider text-muted-foreground uppercase">
-                                <span>Beban Operasional</span>
+                        {/* KOREKSI STOK (satu-satunya beban/rugi non-HPP saat ini) */}
+                        {(hppDetail.koreksiStokLoss !== 0 ||
+                            hppDetail.koreksiStokGain !== 0) && (
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-sm font-bold tracking-wider text-muted-foreground uppercase">
+                                    <span>Koreksi Stok</span>
+                                </div>
+                                <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
+                                    <span>
+                                        Kerugian Koreksi Stok (Barang Rusak/Hilang)
+                                    </span>
+                                    <span className="font-semibold text-destructive">
+                                        ({formatRupiah(hppDetail.koreksiStokLoss)})
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
+                                    <span>
+                                        Keuntungan Koreksi Stok (Barang Lebih)
+                                    </span>
+                                    <span className="font-semibold text-green-600">
+                                        {formatRupiah(hppDetail.koreksiStokGain)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between rounded bg-muted/30 p-2 text-sm font-bold">
+                                    <span>Total Koreksi Stok</span>
+                                    <span>({formatRupiah(operasional)})</span>
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
-                                <span>
-                                    Kerugian Koreksi Stok (Barang Rusak/Hilang)
-                                </span>
-                                <span className="font-semibold text-destructive">
-                                    (
-                                    {formatRupiah(
-                                        operasionalDetail.koreksiStokLoss,
-                                    )}
-                                    )
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
-                                <span>
-                                    Keuntungan Koreksi Stok (Barang Lebih)
-                                </span>
-                                <span className="font-semibold text-green-600">
-                                    {formatRupiah(
-                                        operasionalDetail.koreksiStokGain,
-                                    )}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between rounded bg-muted/30 p-2 text-sm font-bold">
-                                <span>Total Beban Operasional</span>
-                                <span>({formatRupiah(operasional)})</span>
-                            </div>
-                        </div>
+                        )}
 
                         {/* LABA BERSIH */}
                         <div

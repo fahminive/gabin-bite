@@ -39,11 +39,42 @@ class ProdukController extends Controller
             $p->belum_diserahkan = (float) ($belumDiserahkan[$p->id] ?? 0);
         });
 
+        // Rincian terjual per varian: qty + nilai (harga jual saat transaksi),
+        // untuk tabel detail di bawah kartu ringkasan.
+        $terjualPerVarian = DB::table('detail_penjualans as dp')
+            ->join('penjualans as pj', 'pj.id', '=', 'dp.penjualan_id')
+            ->join('produks as pr', 'pr.id', '=', 'dp.produk_id')
+            ->where(function ($q) {
+                $q->whereNotNull('pj.tanggal_diberikan')
+                    ->orWhere('pj.status_penyerahan', 'sudah_diberikan');
+            })
+            ->groupBy('pr.id', 'pr.kode', 'pr.nama_produk', 'pr.satuan')
+            ->orderBy('pr.kode')
+            ->select(
+                'pr.id as produk_id',
+                'pr.kode',
+                'pr.nama_produk',
+                'pr.satuan',
+                DB::raw('SUM(dp.qty) as qty_terjual'),
+                DB::raw('SUM(dp.subtotal) as nilai_terjual'),
+            )
+            ->get()
+            ->map(fn ($row) => [
+                'produk_id' => (int) $row->produk_id,
+                'kode' => $row->kode,
+                'nama_produk' => $row->nama_produk,
+                'satuan' => $row->satuan,
+                'qty_terjual' => (float) $row->qty_terjual,
+                'nilai_terjual' => (float) $row->nilai_terjual,
+            ])
+            ->all();
+
         return Inertia::render('Produk/Index', [
             'user' => 'Dashboard Produk',
             'products' => $products,
             'terjualSeumurHidup' => (float) $products->sum('terjual_seumur_hidup'),
             'belumDiserahkan' => (float) $products->sum('belum_diserahkan'),
+            'terjualPerVarian' => $terjualPerVarian,
         ]);
     }
 

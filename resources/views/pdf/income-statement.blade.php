@@ -51,11 +51,11 @@
         </tr>
         <tr>
             <td style="padding-left: 20px;">Kerugian Koreksi Stok</td>
-            <td class="text-right text-danger">({{ number_format($operasionalDetail['koreksiStokLoss'], 0, ',', '.') }})</td>
+            <td class="text-right text-danger">({{ number_format($hppDetail['koreksiStokLoss'], 0, ',', '.') }})</td>
         </tr>
         <tr>
             <td style="padding-left: 20px;">Keuntungan Koreksi Stok</td>
-            <td class="text-right text-success">{{ number_format($operasionalDetail['koreksiStokGain'], 0, ',', '.') }}</td>
+            <td class="text-right text-success">{{ number_format($hppDetail['koreksiStokGain'], 0, ',', '.') }}</td>
         </tr>
         <tr class="font-bold">
             <td style="padding-left: 10px;">Total Beban Operasional</td>

@@ -271,6 +271,41 @@ class LaporanController extends Controller
         // 3. Laba Kotor
         $labaKotor = $pendapatan - $hpp;
 
+        // 3b. Rincian per varian: pendapatan, qty terjual, dan HPP masing-masing
+        //     produk (basis serah terima) supaya laporan transparan.
+        [$varianWhere] = $this->deliveredCondition('pj');
+        $perVarian = DB::table('detail_penjualans as dp')
+            ->join('penjualans as pj', 'pj.id', '=', 'dp.penjualan_id')
+            ->join('produks as pr', 'pr.id', '=', 'dp.produk_id')
+            ->whereBetween(DB::raw('DATE(pj.created_at)'), [$startDate, $endDate])
+            ->when($preOrderId, fn ($q) => $q->where('pj.pre_order_id', $preOrderId))
+            ->whereRaw($varianWhere)
+            ->groupBy('pr.id', 'pr.kode', 'pr.nama_produk', 'pr.satuan')
+            ->orderBy('pr.kode')
+            ->select(
+                'pr.id as produk_id',
+                'pr.kode',
+                'pr.nama_produk',
+                'pr.satuan',
+                DB::raw('SUM(dp.qty) as qty_terjual'),
+                DB::raw('SUM(dp.subtotal) as pendapatan'),
+                DB::raw('SUM(dp.qty * pr.hpp) as hpp'),
+            )
+            ->get()
+            ->map(fn ($row) => [
+                'produk_id' => (int) $row->produk_id,
+                'kode' => $row->kode,
+                'nama_produk' => $row->nama_produk,
+                'satuan' => $row->satuan,
+                'qty_terjual' => (float) $row->qty_terjual,
+                'pendapatan' => (float) $row->pendapatan,
+                'hpp' => (float) $row->hpp,
+                'harga_rata' => (float) $row->qty_terjual > 0
+                    ? (float) $row->pendapatan / (float) $row->qty_terjual
+                    : 0,
+            ])
+            ->all();
+
         // 4. Beban Operasional: hanya rugi/laba dari koreksi stok
         //    (fitur biaya operasional & penyusutan peralatan sudah dihapus).
         $koreksiStokLoss = (float) DB::table('koreksi_stoks')
@@ -312,12 +347,13 @@ class LaporanController extends Controller
             'batches' => $this->batches(),
             'pendapatan' => $pendapatan,
             'hpp' => $hpp,
-            'labaKotor' => $labaKotor,
-            'operasional' => $operasional,
-            'operasionalDetail' => [
+            'hppDetail' => [
                 'koreksiStokLoss' => $koreksiStokLoss,
                 'koreksiStokGain' => $koreksiStokGain,
+                'perVarian' => $perVarian,
             ],
+            'labaKotor' => $labaKotor,
+            'operasional' => $operasional,
             'labaBersihSebelumPajak' => $labaBersihSebelumPajak,
             'bebanPajak' => $bebanPajak,
             'labaBersih' => $labaBersihSetelahPajak,

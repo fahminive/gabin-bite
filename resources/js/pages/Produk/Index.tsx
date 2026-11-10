@@ -9,7 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, PackageOpen, CircleDollarSign, ShoppingBag, Timer } from 'lucide-react';
 import { create } from '@/actions/App/Http/Controllers/ProdukController';
 
-export default function ProdukIndex({ user, products, terjualSeumurHidup = 0, belumDiserahkan = 0 }: { user: string, products: Produk[], terjualSeumurHidup?: number, belumDiserahkan?: number }) {
+interface TerjualVarian {
+    produk_id: number;
+    kode: string;
+    nama_produk: string;
+    satuan: string;
+    qty_terjual: number;
+    nilai_terjual: number;
+}
+
+export default function ProdukIndex({ user, products, terjualSeumurHidup = 0, belumDiserahkan = 0, terjualPerVarian = [] }: { user: string, products: Produk[], terjualSeumurHidup?: number, belumDiserahkan?: number, terjualPerVarian?: TerjualVarian[] }) {
     const { flash } = usePage().props as any;
 
     useEffect(() => {
@@ -88,6 +97,69 @@ export default function ProdukIndex({ user, products, terjualSeumurHidup = 0, be
                 </div>
 
                 <DataTable columns={columns} data={products} searchKey="nama_produk" />
+
+                {/* Detail terjual per varian (seumur hidup) */}
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardHeader className="pb-2 p-4">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold">
+                            <ShoppingBag className="h-4 w-4 text-emerald-500" />
+                            Detail Terjual per Varian
+                            <span className="text-xs font-normal text-muted-foreground">
+                                seumur hidup, basis serah terima ke pembeli
+                            </span>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        {terjualPerVarian.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                Belum ada penjualan yang diserahkan.
+                            </p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[420px] text-sm">
+                                    <thead>
+                                        <tr className="border-b text-left text-xs text-muted-foreground">
+                                            <th className="pb-2 pr-3 font-semibold">Varian</th>
+                                            <th className="pb-2 pr-3 text-right font-semibold">Terjual</th>
+                                            <th className="pb-2 text-right font-semibold">Nilai Terjual</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {terjualPerVarian.map((v) => (
+                                            <tr key={v.produk_id}>
+                                                <td className="py-2 pr-3 font-medium">
+                                                    {v.nama_produk}
+                                                    <span className="ml-1.5 text-xs text-muted-foreground">
+                                                        {v.kode}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2 pr-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                                                    {nf(v.qty_terjual)} {v.satuan}
+                                                </td>
+                                                <td className="py-2 text-right">
+                                                    {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v.nilai_terjual)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="border-t font-bold">
+                                            <td className="py-2 pr-3">Total</td>
+                                            <td className="py-2 pr-3 text-right text-emerald-600 dark:text-emerald-400">
+                                                {nf(terjualSeumurHidup)}
+                                            </td>
+                                            <td className="py-2 text-right">
+                                                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(
+                                                    terjualPerVarian.reduce((sum, v) => sum + Number(v.nilai_terjual), 0),
+                                                )}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
         </>
     );
