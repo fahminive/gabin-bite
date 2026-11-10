@@ -6,10 +6,10 @@ import type { Produk } from './column';
 import { columns } from './column';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Package, PackageOpen, CircleDollarSign } from 'lucide-react';
+import { Plus, Package, PackageOpen, CircleDollarSign, ShoppingBag, Timer } from 'lucide-react';
 import { create } from '@/actions/App/Http/Controllers/ProdukController';
 
-export default function ProdukIndex({ user, products }: { user: string, products: Produk[] }) {
+export default function ProdukIndex({ user, products, terjualSeumurHidup = 0, belumDiserahkan = 0 }: { user: string, products: Produk[], terjualSeumurHidup?: number, belumDiserahkan?: number }) {
     const { flash } = usePage().props as any;
 
     useEffect(() => {
@@ -21,6 +21,8 @@ export default function ProdukIndex({ user, products }: { user: string, products
         }
     }, [flash]);
 
+    const nf = (v: number) =>
+        new Intl.NumberFormat('id-ID').format(v);
     const totalProduk = products.length;
     const totalStok = products.reduce((sum, item) => sum + Number(item.stok), 0);
     const totalNilai = products.reduce((sum, item) => sum + (Number(item.stok) * Number(item.harga_jual)), 0);
@@ -41,7 +43,27 @@ export default function ProdukIndex({ user, products }: { user: string, products
                     </Link>
                 </div>
                 
-                <div className="grid gap-2.5 sm:gap-4 grid-cols-2 md:grid-cols-3 mb-1">
+                <div className="grid gap-2.5 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 mb-1">
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Terjual Seumur Hidup</CardTitle>
+                            <ShoppingBag className="h-4 w-4 text-emerald-500 shrink-0" />
+                        </CardHeader>
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{nf(terjualSeumurHidup)}</div>
+                            <p className="text-[10px] text-muted-foreground">Bungkus sudah diserahkan</p>
+                        </CardContent>
+                    </Card>
+                    <Card className="rounded-2xl border border-border/80 shadow-xs">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Belum Diserahkan</CardTitle>
+                            <Timer className="h-4 w-4 text-amber-500 shrink-0" />
+                        </CardHeader>
+                        <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
+                            <div className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400">{nf(belumDiserahkan)}</div>
+                            <p className="text-[10px] text-muted-foreground">Pesanan menunggu serah terima</p>
+                        </CardContent>
+                    </Card>
                     <Card className="rounded-2xl border border-border/80 shadow-xs">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
                             <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Total Varian</CardTitle>

@@ -69,6 +69,54 @@ class ProduksiController extends Controller
                 ->all();
         }
 
+        // Estimasi produksi: berapa bungkus tiap produk masih bisa dibuat
+        // dari stok bahan saat ini = MIN per bahan resep
+        // (floor(stok_bahan / qty_resep)). Bahan yang habis paling cepat
+        // ditampilkan sebagai pembatas.
+        $bahanStok = BahanBaku::get()->keyBy('id');
+        $recipes = DB::table('reseps')
+            ->select('produk_id', 'bahan_baku_id', 'qty')
+            ->get()
+            ->groupBy('produk_id');
+
+        $productionCapacity = [];
+        foreach (Produk::orderBy('kode')->get(['id', 'kode', 'nama_produk', 'satuan']) as $p) {
+            $resep = $recipes->get($p->id) ?? collect();
+            if ($resep->isEmpty()) {
+                continue;
+            }
+
+            $kapasitas = null;
+            $bahanPembatas = null;
+            foreach ($resep as $row) {
+                $bahan = $bahanStok->get($row->bahan_baku_id);
+                if (! $bahan || (float) $row->qty <= 0) {
+                    continue;
+                }
+                $max = floor((float) $bahan->stok / (float) $row->qty);
+                $kapasitas = $kapasitas === null ? $max : min($kapasitas, $max);
+                if ($bahanPembatas === null || $max < $bahanPembatas['max_tercapai']) {
+                    $bahanPembatas = [
+                        'nama' => $bahan->nama_bahan,
+                        'satuan' => $bahan->satuan,
+                        'sisa_stok' => (float) $bahan->stok,
+                        'max_tercapai' => $max,
+                    ];
+                }
+            }
+
+            if ($kapasitas !== null) {
+                $productionCapacity[] = [
+                    'produk_id' => $p->id,
+                    'produk_kode' => $p->kode,
+                    'nama_produk' => $p->nama_produk,
+                    'satuan' => $p->satuan,
+                    'kapasitas' => max($kapasitas, 0),
+                    'bahan_pembatas' => $bahanPembatas,
+                ];
+            }
+        }
+
         return Inertia::render('Production/Index', [
             'productions' => $productions,
             'metrics' => [
@@ -76,6 +124,7 @@ class ProduksiController extends Controller
                 'totalTransaksiBulanIni' => $totalTransaksiBulanIni,
             ],
             'productionNeeds' => $productionNeeds,
+            'productionCapacity' => $productionCapacity,
             'batches' => $batches,
             'selectedBatchId' => $selectedBatchId,
         ]);

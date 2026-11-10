@@ -90,34 +90,93 @@ export default function IncomeStatement({
         <>
             <Head title="Laporan Laba Rugi" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6 print:p-0">
-                {/* Catatan dasar pencatatan */}
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200 sm:text-sm">
-                    <p className="font-semibold">
-                        Cuan/Boncos ≠ saldo kas — dan memang seharusnya beda.
-                    </p>
-                    <p className="mt-1 leading-relaxed">
-                        Pendapatan di sini diakui saat serah terima (bukan saat
-                        pesanan dibuat), HPP ikut dihitung saat itu, dan beban
-                        non-tunai (penyusutan) diikutkan.{' '}
-                        {uangMukaBelumSerah > 0 && (
-                            <>
-                                Ada{' '}
-                                <strong>
-                                    {formatRupiah(uangMukaBelumSerah)}
+                {/* Catatan cara baca laporan */}
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200 sm:text-sm print:hidden">
+                    <details>
+                        <summary className="cursor-pointer select-none font-semibold">
+                            Cara baca laporan ini — kapan Cuan sama dengan saldo
+                            kas, kapan tidak (klik untuk detail)
+                        </summary>
+                        <div className="mt-2 space-y-2 leading-relaxed">
+                            <p>
+                                Cuan/Boncos di halaman ini dihitung dengan basis{' '}
+                                <strong>serah terima (akrual)</strong>: pendapatan
+                                baru diakui saat barang benar-benar diserahkan ke
+                                pembeli, HPP dibebankan pada saat yang sama, dan
+                                diikutkan pula beban non-tunai (penyusutan
+                                peralatan). Sebaliknya, <em>saldo kas</em> adalah
+                                uang fisik yang benar-benar ada di dompet —
+                Campuran dari setoran modal, dana pribadi partner, dan hasil
+                                usaha.
+                            </p>
+                            <p>
+                                <strong className="font-semibold">
+                                    Kapan nilainya SAMA:
                                 </strong>{' '}
-                                uang muka pesanan yang belum diserahkan — uang
-                                itu ada di saldo kas tapi{' '}
-                                <em>belum</em> dihitung sebagai cuan.{' '}
-                            </>
-                        )}
-                        Lihat tab{' '}
-                        <strong>
-                            <u>Uang Masuk-Keluar</u>
-                        </strong>{' '}
-                        → “Jembatan: Saldo Kas → Cuan” untuk penjelasan
-                        selisihnya.
-                    </p>
+                                bila semua penjualan dibayar tunai dan diserahkan
+                                di hari yang sama, bahan yang dibeli langsung
+                                diproduksi dan terjual habis dalam periode yang
+                                sama, tidak ada setoran modal maupun tarikan
+                                dana pribadi, dan tidak ada pembelian peralatan
+                                — saat itu selisih cuan vs saldo kas mendekati{' '}
+                                <span className="font-mono">0</span>.
+                            </p>
+                            <p className="font-semibold">Kapan sering beda dan kenapa:</p>
+                            <ul className="list-disc space-y-1 pl-5">
+                                <li>
+                                    <strong>Uang muka belum diserahkan</strong>
+                                    {uangMukaBelumSerah > 0
+                                        ? ` (saat ini ${formatRupiah(uangMukaBelumSerah)})`
+                                        : ''}
+                                    : uang sudah masuk kas, barang belum sampai
+                                    ke pembeli — kas tampak lebih besar dari
+                                    cuan. Setelah semua diserahkan, selisihnya
+                                    menyusul dan rapat lagi.
+                                </li>
+                                <li>
+                                    <strong>Belanja bahan vs pemakaian bahan</strong>:
+                                    kas keluar di tanggal pembelian, tapi
+                                    biaya bahan baru masuk HPP ketika produk
+                                    jadinya diserahkan. Bahan yang masih
+                                    tersimpan di gudang tercatat sebagai
+                                    persediaan, belum biaya — jadi bukan rugi.
+                                </li>
+                                <li>
+                                    <strong>Setoran modal usaha &amp; dana pribadi
+                                    member</strong>: menambah saldo kas, tapi
+                                    bukan hasil penjualan, jadi hanya muncul di
+                                    tab Uang Masuk-Keluar, tidak dicuan.
+                                </li>
+                                <li>
+                                    <strong>Peralatan dibeli tunai</strong>:
+                                    kas turun besar di hari pembelian, tapi
+                                    cuan terbebani bertahap via penyusutan —
+                                    di periode pembelian selisihnya membesar.
+                                </li>
+                                <li>
+                                    <strong>Penyusutan &amp; koreksi stok</strong>:
+                                    beban yang memperkecil cuan tanpa ada uang
+                                    keluar-masuk kas.
+                                </li>
+                            </ul>
+                            <p>
+                                <strong className="font-semibold">Kesimpulan:</strong>{' '}
+                                cuan mengukur{' '}
+                                <em>hasil usaha yang benar-benar tuntas</em> di
+                                periode ini; saldo kas hanya menunjukkan{' '}
+                                <em>seberapa banyak uang yang berada di dompet
+                                saat ini</em>. Selisih antara keduanya{' '}
+                                <strong>bukan</strong> berarti salah satu laporan
+                                keliru — komponen penyelisihnya rinci di kartu{' '}
+                                <strong>
+                                    <u>Jembatan: Saldo Kas → Cuan</u>
+                                </strong>{' '}
+                                pada tab <strong>Uang Masuk-Keluar</strong>.
+                            </p>
+                        </div>
+                    </details>
                 </div>
+
                 {/* Header Section */}
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between print:hidden">
                     <div>

@@ -420,7 +420,20 @@ export default function CashFlow({
                                 </span>
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0">
+                        <CardContent className="px-4 pb-3 pt-2 sm:px-6">
+                            <p className="pb-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                                Saldo kas adalah <strong>uang fisik yang ada di
+                                dompet</strong> — isinya bercampur dengan setoran
+                                modal usaha, dana pribadi partner, dan uang muka
+                                pesanan yang belum diserahkan. Karena itu saldo
+                                kas <strong>bisa</strong> berbeda dengan cuan.
+                                Baris-baris di bawah memotong satu per satu
+                                bagian yang <em>bukan</em> hasil usaha, sehingga
+                                tersisa perkiraan laba yang murni berasal dari
+                                arus kas. Bila keduanya selisih jauh, cek baris
+                                mana yang angkanya paling besar — biasanya uang
+                                muka atau persediaan.
+                            </p>
                             <div className="divide-y text-xs sm:text-sm">
                                 <BridgeRow
                                     label="Saldo Akhir Kas"

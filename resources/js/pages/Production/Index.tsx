@@ -38,15 +38,32 @@ interface ProductionNeed {
     jumlah_pesanan: number;
 }
 
+interface BahanPembatas {
+    nama: string;
+    satuan: string;
+    sisa_stok: number;
+    max_tercapai: number;
+}
+
+interface ProductionCapacity {
+    produk_id: number;
+    produk_kode: string;
+    nama_produk: string;
+    satuan: string;
+    kapasitas: number;
+    bahan_pembatas: BahanPembatas | null;
+}
+
 interface Props {
     productions: Produksi[];
     metrics: Metrics;
     productionNeeds: ProductionNeed[];
+    productionCapacity: ProductionCapacity[];
     batches: BatchOption[];
     selectedBatchId: number | null;
 }
 
-export default function ProductionIndex({ productions, metrics, productionNeeds, batches, selectedBatchId }: Props) {
+export default function ProductionIndex({ productions, metrics, productionNeeds, productionCapacity, batches, selectedBatchId }: Props) {
     const { flash } = usePage().props as any;
 
     useEffect(() => {
@@ -135,6 +152,48 @@ export default function ProductionIndex({ productions, metrics, productionNeeds,
                                         <Badge variant="secondary" className="shrink-0 text-xs font-bold">
                                             {need.total_pcs} {need.satuan ?? 'pcs'}
                                         </Badge>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Kartu estimasi bisa diproduksi dari stok bahan sekarang */}
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardHeader className="pb-2 p-4">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold">
+                            <CookingPot className="h-4 w-4 text-emerald-500" />
+                            Estimasi Bisa Diproduksi
+                            <span className="text-xs font-normal text-muted-foreground">
+                                dari stok bahan saat ini
+                            </span>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        {productionCapacity.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                Belum ada resep produk — isi qty resep di halaman Produk untuk melihat estimasi.
+                            </p>
+                        ) : (
+                            <div className="flex flex-col divide-y">
+                                {productionCapacity.map((cap) => (
+                                    <div key={cap.produk_id} className="flex flex-col gap-1 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                                        <span className="font-medium truncate">
+                                            {cap.nama_produk}
+                                            <span className="ml-1.5 text-xs text-muted-foreground">{cap.produk_kode}</span>
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            {cap.bahan_pembatas && (
+                                                <span className="text-xs text-muted-foreground truncate max-w-[180px] sm:max-w-[280px]">
+                                                    {cap.bahan_pembatas.nama} — sisa {cap.bahan_pembatas.sisa_stok} {cap.bahan_pembatas.satuan}
+                                                </span>
+                                            )}
+                                            <Badge variant={cap.kapasitas > 0 ? 'secondary' : 'destructive'}
+                                                className="shrink-0 text-xs font-bold">
+                                                {cap.kapasitas} {cap.satuan ?? 'pcs'}
+                                            </Badge>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

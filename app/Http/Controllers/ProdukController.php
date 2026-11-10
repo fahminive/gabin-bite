@@ -13,9 +13,37 @@ class ProdukController extends Controller
 {
     public function index() {
         $products = Produk::orderBy('kode', 'asc')->get();
+
+        // Terjual seumur hidup = qty pesanan yang sudah diserahkan ke pembeli;
+        // belum diserahkan = qty pesanan yang masih menunggu produksi/serah terima.
+        $terjual = DB::table('detail_penjualans as dp')
+            ->join('penjualans as pj', 'pj.id', '=', 'dp.penjualan_id')
+            ->where(function ($q) {
+                $q->whereNotNull('pj.tanggal_diberikan')
+                    ->orWhere('pj.status_penyerahan', 'sudah_diberikan');
+            })
+            ->groupBy('dp.produk_id')
+            ->select('dp.produk_id', DB::raw('SUM(dp.qty) as total'))
+            ->pluck('total', 'produk_id');
+
+        $belumDiserahkan = DB::table('detail_penjualans as dp')
+            ->join('penjualans as pj', 'pj.id', '=', 'dp.penjualan_id')
+            ->whereNull('pj.tanggal_diberikan')
+            ->where('pj.status_penyerahan', 'belum_diberikan')
+            ->groupBy('dp.produk_id')
+            ->select('dp.produk_id', DB::raw('SUM(dp.qty) as total'))
+            ->pluck('total', 'produk_id');
+
+        $products->each(function ($p) use ($terjual, $belumDiserahkan) {
+            $p->terjual_seumur_hidup = (float) ($terjual[$p->id] ?? 0);
+            $p->belum_diserahkan = (float) ($belumDiserahkan[$p->id] ?? 0);
+        });
+
         return Inertia::render('Produk/Index', [
             'user' => 'Dashboard Produk',
-            'products' => $products
+            'products' => $products,
+            'terjualSeumurHidup' => (float) $products->sum('terjual_seumur_hidup'),
+            'belumDiserahkan' => (float) $products->sum('belum_diserahkan'),
         ]);
     }
 
