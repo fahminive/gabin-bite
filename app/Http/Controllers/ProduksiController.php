@@ -115,7 +115,40 @@ class ProduksiController extends Controller
                     'bahan_pembatas' => $bahanPembatas,
                 ];
             }
+
+            // Rekap kebutuhan bahan bila SEMUA estimasi dikerjakan bersamaan.
+            // Kapasitas per varian dihitung independen dari stok penuh, jadi
+            // jumlahnya bisa melampaui stok - di sini dihitung selisihnya
+            // sebagai peringatan.
+            foreach ($resep as $row) {
+                if (! $bahanStok->has($row->bahan_baku_id) || (float) $row->qty <= 0) {
+                    continue;
+                }
+                $bahan = $bahanStok->get($row->bahan_baku_id);
+                $butuh = (float) $row->qty * (float) max($kapasitas, 0);
+                $key = (int) $row->bahan_baku_id;
+                $butuhGabungan[$key] = [
+                    'nama' => $bahan->nama_bahan,
+                    'satuan' => $bahan->satuan,
+                    'stok' => (float) $bahan->stok,
+                    'butuh' => ($butuhGabungan[$key]['butuh'] ?? 0) + $butuh,
+                ];
+            }
         }
+
+        // Hanya bahan yang akan kurang bila semua estimasi digarap sekaligus.
+        $bahanGap = collect($butuhGabungan ?? [])
+            ->filter(fn ($row) => $row['butuh'] > $row['stok'])
+            ->map(fn ($row) => [
+                'nama' => $row['nama'],
+                'satuan' => $row['satuan'],
+                'stok' => $row['stok'],
+                'butuh' => round($row['butuh'], 3),
+                'kurang' => round($row['butuh'] - $row['stok'], 3),
+            ])
+            ->sortByDesc('kurang')
+            ->values()
+            ->all();
 
         return Inertia::render('Production/Index', [
             'productions' => $productions,
@@ -125,6 +158,7 @@ class ProduksiController extends Controller
             ],
             'productionNeeds' => $productionNeeds,
             'productionCapacity' => $productionCapacity,
+            'bahanGap' => $bahanGap,
             'batches' => $batches,
             'selectedBatchId' => $selectedBatchId,
         ]);
