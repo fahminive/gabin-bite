@@ -10,10 +10,9 @@ class PreOrderController extends Controller
 {
     public function index()
     {
-        $batches = PreOrder::withCount(['pembelians', 'penjualans', 'pengeluaranOperasionals'])
+        $batches = PreOrder::withCount(['pembelians', 'penjualans'])
             ->withSum('penjualans', 'total')
             ->withSum('pembelians', 'total')
-            ->withSum('pengeluaranOperasionals', 'nominal')
             ->orderBy('id', 'desc')
             ->get();
 
@@ -62,7 +61,7 @@ class PreOrderController extends Controller
 
     public function destroy(PreOrder $preOrder)
     {
-        if ($preOrder->pembelians()->exists() || $preOrder->penjualans()->exists() || $preOrder->pengeluaranOperasionals()->exists()) {
+        if ($preOrder->pembelians()->exists() || $preOrder->penjualans()->exists()) {
             return redirect()->route('pre-orders.index')->with('error', 'Batch tidak dapat dihapus karena masih memiliki transaksi terkait.');
         }
 

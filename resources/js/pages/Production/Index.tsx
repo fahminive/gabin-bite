@@ -106,7 +106,7 @@ export default function ProductionIndex({ productions, metrics, productionNeeds,
                                 Kebutuhan Produksi
                                 {selectedBatch && (
                                     <Badge variant="outline" className="text-[10px]">
-                                        {selectedBatch.kode} — {selectedBatch.keterangan}
+                                        {selectedBatch.kode} - {selectedBatch.keterangan}
                                     </Badge>
                                 )}
                             </CardTitle>
@@ -121,7 +121,7 @@ export default function ProductionIndex({ productions, metrics, productionNeeds,
                                     <SelectItem value="none">Semua batch</SelectItem>
                                     {batches.map(b => (
                                         <SelectItem key={b.id} value={String(b.id)}>
-                                            {b.kode} — {b.keterangan} ({b.status})
+                                            {b.kode} - {b.keterangan} ({b.status})
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -173,7 +173,7 @@ export default function ProductionIndex({ productions, metrics, productionNeeds,
                     <CardContent className="p-4 pt-0">
                         {productionCapacity.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
-                                Belum ada resep produk — isi qty resep di halaman Produk untuk melihat estimasi.
+                                Belum ada resep produk. Isi qty resep di halaman Produk untuk melihat estimasi.
                             </p>
                         ) : (
                             <div className="flex flex-col divide-y">
@@ -186,7 +186,7 @@ export default function ProductionIndex({ productions, metrics, productionNeeds,
                                         <div className="flex items-center gap-2">
                                             {cap.bahan_pembatas && (
                                                 <span className="text-xs text-muted-foreground truncate max-w-[180px] sm:max-w-[280px]">
-                                                    {cap.bahan_pembatas.nama} — sisa {cap.bahan_pembatas.sisa_stok} {cap.bahan_pembatas.satuan}
+                                                    {cap.bahan_pembatas.nama}, sisa {cap.bahan_pembatas.sisa_stok} {cap.bahan_pembatas.satuan}
                                                 </span>
                                             )}
                                             <Badge variant={cap.kapasitas > 0 ? 'secondary' : 'destructive'}

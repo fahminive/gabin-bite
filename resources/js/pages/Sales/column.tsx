@@ -125,7 +125,7 @@ export const columns: ColumnDef<Penjualan>[] = [
     meta: { className: "hidden lg:table-cell" },
     header: "Batch",
     cell: ({ row }) => row.original.pre_order
-      ? `${row.original.pre_order.kode} — ${row.original.pre_order.keterangan}`
+      ? `${row.original.pre_order.kode} - ${row.original.pre_order.keterangan}`
       : "-"
   },
   {

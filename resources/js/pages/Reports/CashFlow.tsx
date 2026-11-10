@@ -41,8 +41,6 @@ interface Props {
     outflows: {
         pembelian: number;
         hutang: number;
-        operasional: number;
-        peralatan: number;
         cashUsaha: number;
         cashPribadi: number;
         cashLainnya: number;
@@ -57,7 +55,6 @@ interface Props {
         uangMukaBelumSerahkan: number;
         persediaanBahan: number;
         persediaanProduk: number;
-        peralatanDibeliTunai: number;
         cuanKas: number;
         labaAkrual: number;
     };
@@ -162,7 +159,7 @@ export default function CashFlow({
                 {/* Print Title */}
                 <div className="mb-6 hidden text-center print:block">
                     <h1 className="text-2xl font-bold">
-                        GABINBITE.PWT — LAPORAN ARUS KAS
+                        GABINBITE.PWT - LAPORAN ARUS KAS
                     </h1>
                     <p className="text-sm text-muted-foreground">
                         Periode: {startDate} s/d {endDate}
@@ -276,7 +273,7 @@ export default function CashFlow({
                                     </TableRow>
                                     <TableRow>
                                         <TableCell className="font-medium">
-                                            Penyesuaian Kas — Uang Usaha
+                                            Penyesuaian Kas - Uang Usaha
                                         </TableCell>
                                         <TableCell className="text-right font-medium text-green-600">
                                             {formatRupiah(inflows.cashUsaha)}
@@ -284,7 +281,7 @@ export default function CashFlow({
                                     </TableRow>
                                     <TableRow>
                                         <TableCell className="font-medium">
-                                            Penyesuaian Kas — Uang Member
+                                            Penyesuaian Kas - Uang Member
                                         </TableCell>
                                         <TableCell className="text-right font-medium text-green-600">
                                             {formatRupiah(inflows.cashPribadi)}
@@ -293,7 +290,7 @@ export default function CashFlow({
                                     {inflows.cashLainnya !== 0 && (
                                         <TableRow>
                                             <TableCell className="font-medium">
-                                                Penyesuaian Kas — Lainnya
+                                                Penyesuaian Kas - Lainnya
                                             </TableCell>
                                             <TableCell className="text-right font-medium text-green-600">
                                                 {formatRupiah(
@@ -352,23 +349,7 @@ export default function CashFlow({
                                     </TableRow>
                                     <TableRow>
                                         <TableCell className="font-medium">
-                                            Biaya Operasional Rutin
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium text-destructive">
-                                            {formatRupiah(outflows.operasional)}
-                                        </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                        <TableCell className="font-medium">
-                                            Pembelian Aset Tetap (Peralatan)
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium text-destructive">
-                                            {formatRupiah(outflows.peralatan)}
-                                        </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                        <TableCell className="font-medium">
-                                            Penyesuaian Kas — Uang Usaha
+                                            Penyesuaian Kas - Uang Usaha
                                         </TableCell>
                                         <TableCell className="text-right font-medium text-destructive">
                                             {formatRupiah(outflows.cashUsaha)}
@@ -376,7 +357,7 @@ export default function CashFlow({
                                     </TableRow>
                                     <TableRow>
                                         <TableCell className="font-medium">
-                                            Penyesuaian Kas — Uang Member
+                                            Penyesuaian Kas - Uang Member
                                         </TableCell>
                                         <TableCell className="text-right font-medium text-destructive">
                                             {formatRupiah(outflows.cashPribadi)}
@@ -385,7 +366,7 @@ export default function CashFlow({
                                     {outflows.cashLainnya !== 0 && (
                                         <TableRow>
                                             <TableCell className="font-medium">
-                                                Penyesuaian Kas — Lainnya
+                                                Penyesuaian Kas - Lainnya
                                             </TableCell>
                                             <TableCell className="text-right font-medium text-destructive">
                                                 {formatRupiah(
@@ -423,7 +404,7 @@ export default function CashFlow({
                         <CardContent className="px-4 pb-3 pt-2 sm:px-6">
                             <p className="pb-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                                 Saldo kas adalah <strong>uang fisik yang ada di
-                                dompet</strong> — isinya bercampur dengan setoran
+                                dompet</strong>: isinya bercampur dengan setoran
                                 modal usaha, dana pribadi partner, dan uang muka
                                 pesanan yang belum diserahkan. Karena itu saldo
                                 kas <strong>bisa</strong> berbeda dengan cuan.
@@ -431,7 +412,7 @@ export default function CashFlow({
                                 bagian yang <em>bukan</em> hasil usaha, sehingga
                                 tersisa perkiraan laba yang murni berasal dari
                                 arus kas. Bila keduanya selisih jauh, cek baris
-                                mana yang angkanya paling besar — biasanya uang
+                                mana yang angkanya paling besar; biasanya uang
                                 muka atau persediaan.
                             </p>
                             <div className="divide-y text-xs sm:text-sm">
@@ -456,24 +437,17 @@ export default function CashFlow({
                                     accent="negative"
                                 />
                                 <BridgeRow
-                                    label="− Nilai persediaan saat ini (bahan + produk yang belum jadi omzet)"
+                                    label="- Nilai persediaan saat ini (bahan + produk yang belum jadi omzet)"
                                     value={-(bridge.persediaanBahan + bridge.persediaanProduk)}
                                     accent="negative"
                                 />
-                                {bridge.peralatanDibeliTunai !== 0 && (
-                                    <BridgeRow
-                                        label="+ Pembelian peralatan tunai (aset investasi, bukan biaya)"
-                                        value={bridge.peralatanDibeliTunai}
-                                        accent="positive"
-                                    />
-                                )}
                                 <BridgeRow
                                     label="= Cuan kas (estimasi laba dari arus kas)"
                                     value={bridge.cuanKas}
                                     strong
                                 />
                                 <BridgeRow
-                                    label="± Laba bersih pada tab Cuan/Boncos (basis serah terima) — selisih wajar karena akrual vs kas & penyusutan"
+                                    label="± Laba bersih pada tab Cuan/Boncos (basis serah terima) - selisih wajar karena akrual vs kas"
                                     value={bridge.labaAkrual}
                                     strong
                                 />

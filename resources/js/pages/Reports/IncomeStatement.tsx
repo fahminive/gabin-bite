@@ -25,10 +25,8 @@ interface Props {
     labaKotor: number;
     operasional: number;
     operasionalDetail: {
-        kas: number;
         koreksiStokLoss: number;
         koreksiStokGain: number;
-        penyusutan: number;
     };
     labaBersihSebelumPajak: number;
     bebanPajak: number;
@@ -94,7 +92,7 @@ export default function IncomeStatement({
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200 sm:text-sm print:hidden">
                     <details>
                         <summary className="cursor-pointer select-none font-semibold">
-                            Cara baca laporan ini — kapan Cuan sama dengan saldo
+                            Cara baca laporan ini: kapan Cuan sama dengan saldo
                             kas, kapan tidak (klik untuk detail)
                         </summary>
                         <div className="mt-2 space-y-2 leading-relaxed">
@@ -102,11 +100,10 @@ export default function IncomeStatement({
                                 Cuan/Boncos di halaman ini dihitung dengan basis{' '}
                                 <strong>serah terima (akrual)</strong>: pendapatan
                                 baru diakui saat barang benar-benar diserahkan ke
-                                pembeli, HPP dibebankan pada saat yang sama, dan
-                                diikutkan pula beban non-tunai (penyusutan
-                                peralatan). Sebaliknya, <em>saldo kas</em> adalah
-                                uang fisik yang benar-benar ada di dompet —
-                Campuran dari setoran modal, dana pribadi partner, dan hasil
+                                pembeli, dan HPP dibebankan pada saat yang sama.
+                                Sebaliknya, <em>saldo kas</em> adalah uang fisik
+                                yang benar-benar ada di dompet: campuran dari
+                                setoran modal, dana pribadi partner, dan hasil
                                 usaha.
                             </p>
                             <p>
@@ -116,9 +113,9 @@ export default function IncomeStatement({
                                 bila semua penjualan dibayar tunai dan diserahkan
                                 di hari yang sama, bahan yang dibeli langsung
                                 diproduksi dan terjual habis dalam periode yang
-                                sama, tidak ada setoran modal maupun tarikan
-                                dana pribadi, dan tidak ada pembelian peralatan
-                                — saat itu selisih cuan vs saldo kas mendekati{' '}
+                                sama, dan tidak ada setoran modal maupun tarikan
+                                dana pribadi di periode itu, maka selisih cuan
+                                vs saldo kas mendekati{' '}
                                 <span className="font-mono">0</span>.
                             </p>
                             <p className="font-semibold">Kapan sering beda dan kenapa:</p>
@@ -129,9 +126,9 @@ export default function IncomeStatement({
                                         ? ` (saat ini ${formatRupiah(uangMukaBelumSerah)})`
                                         : ''}
                                     : uang sudah masuk kas, barang belum sampai
-                                    ke pembeli — kas tampak lebih besar dari
-                                    cuan. Setelah semua diserahkan, selisihnya
-                                    menyusul dan rapat lagi.
+                                    ke pembeli, sehingga kas tampak lebih
+                                    besar dari cuan. Setelah semua diserahkan,
+                                    selisihnya menyusul dan rapat lagi.
                                 </li>
                                 <li>
                                     <strong>Belanja bahan vs pemakaian bahan</strong>:
@@ -139,7 +136,7 @@ export default function IncomeStatement({
                                     biaya bahan baru masuk HPP ketika produk
                                     jadinya diserahkan. Bahan yang masih
                                     tersimpan di gudang tercatat sebagai
-                                    persediaan, belum biaya — jadi bukan rugi.
+                                    persediaan, belum jadi biaya, jadi bukan rugi.
                                 </li>
                                 <li>
                                     <strong>Setoran modal usaha &amp; dana pribadi
@@ -148,15 +145,9 @@ export default function IncomeStatement({
                                     tab Uang Masuk-Keluar, tidak dicuan.
                                 </li>
                                 <li>
-                                    <strong>Peralatan dibeli tunai</strong>:
-                                    kas turun besar di hari pembelian, tapi
-                                    cuan terbebani bertahap via penyusutan —
-                                    di periode pembelian selisihnya membesar.
-                                </li>
-                                <li>
-                                    <strong>Penyusutan &amp; koreksi stok</strong>:
-                                    beban yang memperkecil cuan tanpa ada uang
-                                    keluar-masuk kas.
+                                    <strong>Koreksi stok</strong>: beban atau
+                                    pengurang beban yang mengubah cuan tanpa ada
+                                    uang keluar-masuk kas.
                                 </li>
                             </ul>
                             <p>
@@ -167,7 +158,7 @@ export default function IncomeStatement({
                                 <em>seberapa banyak uang yang berada di dompet
                                 saat ini</em>. Selisih antara keduanya{' '}
                                 <strong>bukan</strong> berarti salah satu laporan
-                                keliru — komponen penyelisihnya rinci di kartu{' '}
+                                keliru; komponen penyelisihnya dirinci di kartu{' '}
                                 <strong>
                                     <u>Jembatan: Saldo Kas → Cuan</u>
                                 </strong>{' '}
@@ -243,7 +234,7 @@ export default function IncomeStatement({
                 {/* Print Title */}
                 <div className="mb-6 hidden text-center print:block">
                     <h1 className="text-2xl font-bold">
-                        GABINBITE.PWT — LAPORAN LABA RUGI
+                        GABINBITE.PWT - LAPORAN LABA RUGI
                     </h1>
                     <p className="text-sm text-muted-foreground">
                         Periode: {startDate} s/d {endDate}
@@ -367,12 +358,6 @@ export default function IncomeStatement({
                                 <span>Beban Operasional</span>
                             </div>
                             <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
-                                <span>Pengeluaran Biaya Operasional (Kas)</span>
-                                <span className="font-semibold text-destructive">
-                                    ({formatRupiah(operasionalDetail.kas)})
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
                                 <span>
                                     Kerugian Koreksi Stok (Barang Rusak/Hilang)
                                 </span>
@@ -392,14 +377,6 @@ export default function IncomeStatement({
                                     {formatRupiah(
                                         operasionalDetail.koreksiStokGain,
                                     )}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between border-b py-2 pl-4 text-sm">
-                                <span>Beban Penyusutan Peralatan</span>
-                                <span className="font-semibold text-destructive">
-                                    (
-                                    {formatRupiah(operasionalDetail.penyusutan)}
-                                    )
                                 </span>
                             </div>
                             <div className="flex items-center justify-between rounded bg-muted/30 p-2 text-sm font-bold">

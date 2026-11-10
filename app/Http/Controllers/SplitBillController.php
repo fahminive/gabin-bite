@@ -3,15 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Mitra;
+use App\Models\MitraPenyesuaian;
 use App\Models\MitraTransfer;
-use App\Models\Pembelian;
-use App\Models\PengeluaranOperasional;
 use App\Models\PreOrder;
 use App\Models\SplitTagihan;
 use App\Services\SplitBillService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class SplitBillController extends Controller
@@ -24,32 +22,9 @@ class SplitBillController extends Controller
         $endDate = $request->input('end_date');
         $preOrderId = $request->input('pre_order_id');
 
-        $query = Pembelian::with(['mitra', 'preOrder', 'splitTagihans.mitra'])
-            ->whereHas('splitTagihans')
-            ->orderBy('created_at', 'desc');
-
-        if ($startDate && $endDate) {
-            $query->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
-        }
-        if ($preOrderId) {
-            $query->where('pre_order_id', $preOrderId);
-        }
-
-        $purchases = $query->get();
-
-        $expensesQuery = PengeluaranOperasional::with(['mitra', 'preOrder', 'splitTagihans.mitra'])
-            ->whereHas('splitTagihans')
-            ->orderBy('tanggal', 'desc');
-
-        if ($startDate && $endDate) {
-            $expensesQuery->whereBetween('tanggal', [$startDate, $endDate]);
-        }
-        if ($preOrderId) {
-            $expensesQuery->where('pre_order_id', $preOrderId);
-        }
-
-        $expenses = $expensesQuery->get();
-
+        // Sengaja TIDAK memuat daftar pembelian (sumber 500 di Vercel):
+        // halaman ini hanya menampilkan saldo partner, penyesuaian manual,
+        // matriks tunggakan, dan transfer - semuanya hasil agregasi SQL ringkas.
         $transfersQuery = MitraTransfer::with(['dariMitra', 'keMitra', 'preOrder'])
             ->orderByDesc('tanggal')
             ->orderByDesc('id');
@@ -67,8 +42,12 @@ class SplitBillController extends Controller
             'mitras' => Mitra::with('user')->orderBy('kode')->get(),
             'balances' => $splitBill->balances($preOrderId ? (int) $preOrderId : null),
             'obligations' => $splitBill->memberObligations($preOrderId ? (int) $preOrderId : null),
-            'purchases' => $purchases,
-            'expenses' => $expenses,
+            'adjustments' => MitraPenyesuaian::with(['mitra', 'preOrder'])
+                ->when($startDate && $endDate, fn ($q) => $q->whereBetween('tanggal', [$startDate, $endDate]))
+                ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+                ->orderByDesc('tanggal')
+                ->orderByDesc('id')
+                ->get(),
             'transfers' => $transfers,
             'batches' => PreOrder::orderByDesc('created_at')->get(),
             'filters' => [
@@ -123,6 +102,52 @@ class SplitBillController extends Controller
         $transfer->delete();
 
         return back()->with('success', 'Catatan pembayaran antar partner berhasil dihapus.');
+    }
+
+    public function storeAdjustment(Request $request)
+    {
+        $validated = $this->validateAdjustment($request);
+
+        MitraPenyesuaian::create($validated);
+
+        return back()->with('success', 'Penyesuaian partner dicatat.');
+    }
+
+    public function updateAdjustment(Request $request, MitraPenyesuaian $adjustment)
+    {
+        $validated = $this->validateAdjustment($request);
+
+        $adjustment->update($validated);
+
+        return back()->with('success', 'Penyesuaian partner diperbarui.');
+    }
+
+    public function destroyAdjustment(MitraPenyesuaian $adjustment)
+    {
+        $adjustment->delete();
+
+        return back()->with('success', 'Penyesuaian partner dihapus.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validateAdjustment(Request $request): array
+    {
+        $validated = $request->validate([
+            'mitra_id' => 'required|integer|exists:mitras,id',
+            'nominal' => 'required|numeric|not_in:0',
+            'tanggal' => 'required|date',
+            'pre_order_id' => 'nullable|integer|exists:pre_orders,id',
+            'keterangan' => 'nullable|string|max:255',
+        ], [
+            'nominal.not_in' => 'Nominal tidak boleh nol. Gunakan plus untuk pengeluaran tambahan, minus untuk potongan.',
+        ]);
+
+        $validated['tanggal'] = Carbon::parse($validated['tanggal'])->toDateString();
+        $validated['nominal'] = round((float) $validated['nominal'], 2);
+
+        return $validated;
     }
 
     /**

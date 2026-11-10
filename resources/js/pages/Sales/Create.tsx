@@ -192,7 +192,7 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
                                         <SelectTrigger id="pre_order_id" className="w-full"><SelectValue placeholder="Pilih batch (opsional)" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">Tanpa batch</SelectItem>
-                                            {batches.map(batch => <SelectItem key={batch.id} value={String(batch.id)}>{batch.kode} — {batch.keterangan}</SelectItem>)}
+                                            {batches.map(batch => <SelectItem key={batch.id} value={String(batch.id)}>{batch.kode} - {batch.keterangan}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     {form.errors.pre_order_id && <FieldError>{form.errors.pre_order_id}</FieldError>}

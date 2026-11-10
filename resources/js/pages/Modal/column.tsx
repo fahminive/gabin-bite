@@ -21,7 +21,7 @@ import {
 export type ModalType = {
   id: number
   nominal: string
-  tipe: 'Uang Tunai' | 'Peralatan / Aset' | 'Lainnya'
+  tipe: 'Uang Tunai' | 'Lainnya'
   keterangan: string | null
   created_at: string
 }

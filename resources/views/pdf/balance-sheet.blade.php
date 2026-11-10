@@ -39,13 +39,6 @@
                         <td style="padding-left: 10px;">Total Aset Lancar</td>
                         <td class="text-right">Rp {{ number_format($assets['totalAsetLancar'] ?? 0, 0, ',', '.') }}</td>
                     </tr>
-                    <tr class="bg-gray-50 font-bold">
-                        <td colspan="2">Aset Tetap</td>
-                    </tr>
-                    <tr>
-                        <td style="padding-left: 15px;">Peralatan dan Mesin</td>
-                        <td class="text-right">Rp {{ number_format($assets['peralatan'] ?? 0, 0, ',', '.') }}</td>
-                    </tr>
                     <tr class="bg-blue-50 font-bold" style="font-size: 9pt;">
                         <td>TOTAL ASET</td>
                         <td class="text-right" style="border-top: 1.5px solid #2d3748; border-bottom: 1.5px solid #2d3748;">

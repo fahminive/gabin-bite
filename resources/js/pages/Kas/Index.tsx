@@ -151,12 +151,10 @@ export default function KasIndex({ transactions, metrics, batches = [], filters 
                                 <SelectContent>
                                     <SelectItem value="all">Semua Sumber</SelectItem>
                                     <SelectItem value="modal">Setoran Modal</SelectItem>
-                                    <SelectItem value="operasional">Biaya Operasional</SelectItem>
                                     <SelectItem value="pembelian">Pembelian</SelectItem>
                                     <SelectItem value="penjualan">Penjualan</SelectItem>
                                     <SelectItem value="hutang">Hutang Usaha</SelectItem>
                                     <SelectItem value="piutang">Piutang Usaha</SelectItem>
-                                    <SelectItem value="peralatan">Peralatan</SelectItem>
                                     <SelectItem value="lainnya">Penyesuaian Lainnya</SelectItem>
                                 </SelectContent>
                             </Select>

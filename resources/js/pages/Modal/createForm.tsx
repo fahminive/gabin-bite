@@ -25,7 +25,7 @@ interface Props {
     modal?: {
         id: number
         nominal: string
-        tipe: 'Uang Tunai' | 'Peralatan / Aset' | 'Lainnya'
+        tipe: 'Uang Tunai' | 'Lainnya'
         keterangan: string | null
     }
 }
@@ -102,7 +102,7 @@ export function ModalForm({
                         onValueChange={(val) =>
                             form.setData(
                                 "tipe",
-                                val as 'Uang Tunai' | 'Peralatan / Aset' | 'Lainnya'
+                                val as 'Uang Tunai' | 'Lainnya'
                             )
                         }
                     >
@@ -112,9 +112,6 @@ export function ModalForm({
                         <SelectContent>
                             <SelectItem value="Uang Tunai">
                                 Uang Tunai (Masuk Kas)
-                            </SelectItem>
-                            <SelectItem value="Peralatan / Aset">
-                                Peralatan / Aset (Non-Kas)
                             </SelectItem>
                             <SelectItem value="Lainnya">
                                 Lainnya (Non-Kas)

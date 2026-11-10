@@ -73,7 +73,7 @@ export function BatchFilter({
                 <SelectItem value="all">Semua batch</SelectItem>
                 {batches.map((batch) => (
                     <SelectItem key={batch.id} value={String(batch.id)}>
-                        {batch.kode} — {batch.keterangan}
+                        {batch.kode} - {batch.keterangan}
                     </SelectItem>
                 ))}
             </SelectContent>

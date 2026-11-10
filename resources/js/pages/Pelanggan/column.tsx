@@ -111,7 +111,7 @@ export const columns: ColumnDef<Pelanggan>[] = [
                             <div className="mb-1 flex items-center justify-between gap-2">
                                 <span className="font-medium">
                                     {order.pre_order
-                                        ? `${order.pre_order.kode} — ${order.pre_order.keterangan}`
+                                        ? `${order.pre_order.kode} - ${order.pre_order.keterangan}`
                                         : order.no_faktur}
                                 </span>
                                 <OrderStatusDialog sale={order} label="Ubah" />

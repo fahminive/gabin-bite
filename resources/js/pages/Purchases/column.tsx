@@ -85,7 +85,7 @@ export const columns: ColumnDef<Pembelian>[] = [
   {
     id: "batch",
     header: "Batch Pre-Order",
-    cell: ({ row }) => row.original.pre_order ? `${row.original.pre_order.kode} — ${row.original.pre_order.keterangan}` : "-"
+    cell: ({ row }) => row.original.pre_order ? `${row.original.pre_order.kode} - ${row.original.pre_order.keterangan}` : "-"
   },
   {
     id: "items",

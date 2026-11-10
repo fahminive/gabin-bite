@@ -4,9 +4,9 @@ namespace App\Services;
 
 use App\Models\Kas;
 use App\Models\Mitra;
+use App\Models\MitraPenyesuaian;
 use App\Models\MitraTransfer;
 use App\Models\Pembelian;
-use App\Models\PengeluaranOperasional;
 use App\Models\SplitTagihan;
 use Illuminate\Support\Facades\DB;
 
@@ -53,46 +53,6 @@ class SplitBillService
         }
     }
 
-    public function createForOperasional(PengeluaranOperasional $operasional): void
-    {
-        if (! $operasional->is_bersama) {
-            return;
-        }
-
-        Mitra::ensureTrio();
-        $mitras = Mitra::orderBy('kode')->get();
-
-        if ($mitras->isEmpty()) {
-            return;
-        }
-
-        SplitTagihan::where('pengeluaran_operasional_id', $operasional->id)->delete();
-
-        $totalCents = (int) round(((float) $operasional->nominal) * 100);
-        $count = $mitras->count();
-        $base = intdiv($totalCents, $count);
-        $remainder = $totalCents % $count;
-
-        $payerIndex = $mitras->search(fn (Mitra $mitra) => $mitra->id === $operasional->mitra_id);
-        if ($payerIndex === false) {
-            $payerIndex = 0;
-        }
-
-        foreach ($mitras as $index => $mitra) {
-            $shareCents = $base + ($index === $payerIndex ? $remainder : 0);
-            $isPayer = $operasional->mitra_id && $mitra->id === $operasional->mitra_id;
-
-            SplitTagihan::create([
-                'pembelian_id' => null,
-                'pengeluaran_operasional_id' => $operasional->id,
-                'mitra_id' => $mitra->id,
-                'bagian' => $shareCents / 100,
-                'status' => $isPayer ? 'lunas' : 'belum_lunas',
-                'lunas_at' => $isPayer ? now() : null,
-            ]);
-        }
-    }
-
     /**
      * Baca saja info mitra (N, W, F) dalam skin SELEKTIF:
      * hanya SELECT mitra + user, tanpa menulis apa pun ke database.
@@ -105,11 +65,11 @@ class SplitBillService
     }
 
     /**
-     * Siapa menalangi apa: 3–4 query GROUP BY menghitung total yang
+     * Siapa menalangi apa: beberapa query GROUP BY menghitung total yang
      * ditanggung/terutang setiap partner dari pembelian (belanja),
-     * pengeluaran operasional bersama, bagian patungan, dan kas dana pribadi.
+     * bagian patungan, kas dana pribadi, dan penyesuaian manual.
      *
-     * @return array<int, array{total_belanja?:float, total_operasional?:float, total_bagian_patungan?:float, dana_pribadi_masuk?:float, dana_pribadi_keluar?:float}>
+     * @return array<int, array{total_belanja?:float, total_bagian_patungan?:float, dana_pribadi_masuk?:float, dana_pribadi_keluar?:float, penyesuaian?:float}>
      */
     private function partnerFlowSums(?int $preOrderId = null): array
     {
@@ -126,28 +86,14 @@ class SplitBillService
             $rows[(int) $mitraId]['total_belanja'] = (float) $total;
         }
 
-        // 2. Biaya operasional yang ditanggung partner
-        $operasionals = PengeluaranOperasional::query()
-            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
-            ->whereNotNull('mitra_id')
-            ->groupBy('mitra_id')
-            ->select('mitra_id', DB::raw('SUM("nominal") as total'))
-            ->pluck('total', 'mitra_id');
-
-        foreach ($operasionals as $mitraId => $total) {
-            $rows[(int) $mitraId]['total_operasional'] = (float) $total;
-        }
-
-        // 3. Bagian patungan per partner (split_tagihans — parent punya pre_order_id,
-        //    jadi filter lewat COALESCE kedua parent tanpa whereHas berlapis)
+        // 2. Bagian patungan per partner (split_tagihans — parent punya pre_order_id)
         $parentPreOrder = $preOrderId
-            ? "COALESCE(pb.\"pre_order_id\", po.\"pre_order_id\") = {$preOrderId}"
+            ? "pb.\"pre_order_id\" = {$preOrderId}"
             : '1 = 1';
 
         $splitRows = DB::table('split_tagihans as st')
-            ->leftJoin('pembelians as pb', 'pb.id', '=', 'st.pembelian_id')
-            ->leftJoin('pengeluaran_operasionals as po', 'po.id', '=', 'st.pengeluaran_operasional_id')
-            ->whereRaw("COALESCE(pb.id, po.id) IS NOT NULL AND {$parentPreOrder}")
+            ->join('pembelians as pb', 'pb.id', '=', 'st.pembelian_id')
+            ->whereRaw($parentPreOrder)
             ->groupBy('st.mitra_id')
             ->select('st.mitra_id', DB::raw('SUM(st.bagian) as total'))
             ->get();
@@ -156,7 +102,7 @@ class SplitBillService
             $rows[(int) $row->mitra_id]['total_bagian_patungan'] = (float) $row->total;
         }
 
-        // 4. Arus kas dana pribadi partner (penyesuaian kas manual sumber 'pribadi'):
+        // 3. Arus kas dana pribadi partner (penyesuaian kas manual sumber 'pribadi'):
         //    setoran pribadi (masuk) menambah "dana talangan", penarikan (keluar) mengurangi.
         //    Baris penyesuaian manual tidak punya tautan batch, jadi hanya dihitung
         //    di tampilan global (tanpa filter batch).
@@ -176,13 +122,24 @@ class SplitBillService
             }
         }
 
+        // 4. Penyesuaian manual per partner (+/-): pengeluaran yang tidak tercatat
+        //    dari pembelian bisa diisi (+), pemasukan/potongan bisa dikurangi (-).
+        $penyesuaian = MitraPenyesuaian::query()
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->groupBy('mitra_id')
+            ->select('mitra_id', DB::raw('SUM("nominal") as total'))
+            ->pluck('total', 'mitra_id');
+
+        foreach ($penyesuaian as $mitraId => $total) {
+            $rows[(int) $mitraId]['penyesuaian'] = (float) $total;
+        }
+
         return $rows;
     }
 
     /**
      * Matriks tunggakan antar partner: berapa yang harus dibayar setiap member
-     * ke member lain, berdasarkan split tagihan yang belum lunas — mencakup
-     * SEMUA arus: pembelian (belanja ditalangi) DAN pengeluaran operasional bersama.
+     * ke member lain, berdasarkan split tagihan pembelian yang belum lunas.
      *
      * @return array{
      *     mitras: array<int,array{id:int,nama:string,kode:string}>,
@@ -206,18 +163,13 @@ class SplitBillService
             $totalByCreditor[$creditor] = 0.0;
         }
 
-        // Satu query: pasangan (yang utang → yang menalangi) dari SEMUA jenis split.
+        // Satu query: pasangan (yang utang -> yang menalangi) dari split pembelian.
         $rows = DB::table('split_tagihans as st')
-            ->leftJoin('pembelians as pb', 'pb.id', '=', 'st.pembelian_id')
-            ->leftJoin('pengeluaran_operasionals as po', 'po.id', '=', 'st.pengeluaran_operasional_id')
+            ->join('pembelians as pb', 'pb.id', '=', 'st.pembelian_id')
             ->where('st.status', 'belum_lunas')
-            ->whereRaw('COALESCE(pb."mitra_id", po."mitra_id") IS NOT NULL')
-            ->when($preOrderId, fn ($q) => $q->whereRaw(
-                'COALESCE(pb."pre_order_id", po."pre_order_id") = ?',
-                [$preOrderId]
-            ))
-            ->groupBy('st.mitra_id', 'creditor')
-            ->selectRaw('st."mitra_id" as debtor, COALESCE(pb."mitra_id", po."mitra_id") as creditor, SUM(st."bagian") as total')
+            ->when($preOrderId, fn ($q) => $q->where('pb.pre_order_id', $preOrderId))
+            ->groupBy('st.mitra_id', 'pb.mitra_id')
+            ->selectRaw('st."mitra_id" as debtor, pb."mitra_id" as creditor, SUM(st."bagian") as total')
             ->get();
 
         foreach ($rows as $row) {
@@ -262,12 +214,13 @@ class SplitBillService
         return $mitras->map(function (Mitra $mitra) use ($flows, $transferOut, $transferIn) {
             $flow = $flows[$mitra->id] ?? [];
 
-            $dibayar = (float) ($flow['total_belanja'] ?? 0) + (float) ($flow['total_operasional'] ?? 0);
+            $dibayar = (float) ($flow['total_belanja'] ?? 0);
             $bagian = (float) ($flow['total_bagian_patungan'] ?? 0);
             $transferKeluar = (float) ($transferOut[$mitra->id] ?? 0);
             $transferMasuk = (float) ($transferIn[$mitra->id] ?? 0);
             $danaPribadiMasuk = (float) ($flow['dana_pribadi_masuk'] ?? 0);
             $danaPribadiKeluar = (float) ($flow['dana_pribadi_keluar'] ?? 0);
+            $penyesuaian = (float) ($flow['penyesuaian'] ?? 0);
 
             return [
                 'id' => $mitra->id,
@@ -279,12 +232,14 @@ class SplitBillService
                 'bagian' => $bagian,
                 'dana_pribadi_masuk' => $danaPribadiMasuk,
                 'dana_pribadi_keluar' => $danaPribadiKeluar,
+                'penyesuaian' => $penyesuaian,
                 'transfer_keluar' => $transferKeluar,
                 'transfer_masuk' => $transferMasuk,
                 // saldo mensintesiskan SEMUA arus partner: belanja ditalangi,
-                // bagian patungan, kas dana pribadi, dan transfer antar partner.
+                // bagian patungan, kas dana pribadi, penyesuaian manual,
+                // dan transfer antar partner.
                 'saldo' => $dibayar + $danaPribadiMasuk - $danaPribadiKeluar
-                    - $bagian + $transferMasuk - $transferKeluar,
+                    - $bagian + $penyesuaian + $transferMasuk - $transferKeluar,
             ];
         })->all();
     }

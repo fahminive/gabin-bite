@@ -28,9 +28,4 @@ class PreOrder extends Model
     {
         return $this->hasMany(Penjualan::class);
     }
-
-    public function pengeluaranOperasionals(): HasMany
-    {
-        return $this->hasMany(PengeluaranOperasional::class);
-    }
 }

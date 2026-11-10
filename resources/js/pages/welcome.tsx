@@ -74,7 +74,7 @@ export default function Welcome() {
 
     return (
         <>
-            <Head title="gabinbite.pwt — Gabin renyah, buku rapi" />
+            <Head title="gabinbite.pwt: Gabin renyah, buku rapi" />
 
             <div className="relative min-h-svh overflow-hidden bg-background text-foreground">
                 {/* decorative background */}
@@ -162,7 +162,7 @@ export default function Welcome() {
                             </h1>
 
                             <p className="mt-7 max-w-xl text-base leading-relaxed font-medium text-muted-foreground sm:text-lg">
-                                Kenalin, <strong className="text-foreground">gabinbite.pwt</strong> — dapur
+                                Kenalin, <strong className="text-foreground">gabinbite.pwt</strong>: dapur
                                 digital buat bisnis gabin es krim. Catat bahan, pesanan, kas, dan
                                 patungan partner tanpa bikin kepala nge-freeze.
                             </p>
@@ -370,7 +370,7 @@ export default function Welcome() {
                             </span>
                         </div>
                         <p className="text-xs font-semibold text-muted-foreground">
-                            © {new Date().getFullYear()} gabinbite.pwt — dibuat sambil ngemil. Kalau
+                            © {new Date().getFullYear()} gabinbite.pwt, dibuat sambil ngemil. Kalau
                             ada bug, anggap topping. 🍦
                         </p>
                     </div>

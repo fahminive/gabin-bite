@@ -36,16 +36,16 @@
             <td class="text-right">Rp {{ number_format($inflows['modal'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         <tr>
-            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Usaha</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas - Uang Usaha</td>
             <td class="text-right">Rp {{ number_format($inflows['cashUsaha'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         <tr>
-            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Member</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas - Uang Member</td>
             <td class="text-right">Rp {{ number_format($inflows['cashPribadi'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         @if (($inflows['cashLainnya'] ?? 0) != 0)
         <tr>
-            <td style="padding-left: 25px;">Penyesuaian Kas — Lainnya</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas - Lainnya</td>
             <td class="text-right">Rp {{ number_format($inflows['cashLainnya'], 0, ',', '.') }}</td>
         </tr>
         @endif
@@ -67,24 +67,16 @@
             <td class="text-right">Rp {{ number_format($outflows['hutang'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         <tr>
-            <td style="padding-left: 25px;">Pengeluaran Biaya Operasional</td>
-            <td class="text-right">Rp {{ number_format($outflows['operasional'] ?? 0, 0, ',', '.') }}</td>
-        </tr>
-        <tr>
-            <td style="padding-left: 25px;">Pembelian Peralatan</td>
-            <td class="text-right">Rp {{ number_format($outflows['peralatan'] ?? 0, 0, ',', '.') }}</td>
-        </tr>
-        <tr>
-            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Usaha</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas - Uang Usaha</td>
             <td class="text-right">Rp {{ number_format($outflows['cashUsaha'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         <tr>
-            <td style="padding-left: 25px;">Penyesuaian Kas — Uang Member</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas - Uang Member</td>
             <td class="text-right">Rp {{ number_format($outflows['cashPribadi'] ?? 0, 0, ',', '.') }}</td>
         </tr>
         @if (($outflows['cashLainnya'] ?? 0) != 0)
         <tr>
-            <td style="padding-left: 25px;">Penyesuaian Kas — Lainnya</td>
+            <td style="padding-left: 25px;">Penyesuaian Kas - Lainnya</td>
             <td class="text-right">Rp {{ number_format($outflows['cashLainnya'], 0, ',', '.') }}</td>
         </tr>
         @endif

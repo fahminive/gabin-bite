@@ -230,7 +230,7 @@ export function CreateAdjustment() {
                                                 key={m.id}
                                                 value={String(m.id)}
                                             >
-                                                {m.kode} — {m.nama}
+                                                {m.kode} - {m.nama}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>

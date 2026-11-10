@@ -25,7 +25,6 @@ class Kas extends Model
             $q->whereHasMorph('kasable', [
                 Penjualan::class,
                 Pembelian::class,
-                PengeluaranOperasional::class,
             ], function ($sq) use ($preOrderId) {
                 $sq->where('pre_order_id', $preOrderId);
             });

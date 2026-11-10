@@ -399,7 +399,7 @@ export default function PurchasesCreate({
                                                         key={batch.id}
                                                         value={String(batch.id)}
                                                     >
-                                                        {batch.kode} —{' '}
+                                                        {batch.kode} -{' '}
                                                         {batch.keterangan}
                                                     </SelectItem>
                                                 ))}
@@ -436,7 +436,7 @@ export default function PurchasesCreate({
                                                         key={m.id}
                                                         value={String(m.id)}
                                                     >
-                                                        {m.kode} — {m.nama}
+                                                        {m.kode} - {m.nama}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>

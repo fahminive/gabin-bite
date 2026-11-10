@@ -22,11 +22,6 @@ class SplitTagihan extends Model
         return $this->belongsTo(Pembelian::class);
     }
 
-    public function pengeluaranOperasional(): BelongsTo
-    {
-        return $this->belongsTo(PengeluaranOperasional::class);
-    }
-
     public function mitra(): BelongsTo
     {
         return $this->belongsTo(Mitra::class);

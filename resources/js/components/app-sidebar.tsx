@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, Wrench, BadgeDollarSign, Banknote, ChartCandlestick, Activity, ShoppingCart, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, Users, Split, CalendarDays, ClipboardList } from 'lucide-react';
+import { LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, BadgeDollarSign, Banknote, ChartCandlestick, ShoppingCart, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, Users, Split, CalendarDays, ClipboardList } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -19,11 +19,9 @@ import * as materials from '@/actions/App/Http/Controllers/BahanBakuController';
 import * as products from '@/actions/App/Http/Controllers/ProdukController';
 import * as suppliers from '@/actions/App/Http/Controllers/PemasokController';
 import * as customers from '@/actions/App/Http/Controllers/PelangganController';
-import * as equipments from '@/actions/App/Http/Controllers/PeralatanController';
 import * as paymentMethods from '@/actions/App/Http/Controllers/MetodePembayaranController';
 import * as cash from '@/actions/App/Http/Controllers/KasController';
 import * as modals from '@/actions/App/Http/Controllers/ModalController';
-import * as expenses from '@/actions/App/Http/Controllers/PengeluaranOperasionalController';
 import * as purchases from '@/actions/App/Http/Controllers/PembelianController';
 import * as productions from '@/actions/App/Http/Controllers/ProduksiController';
 import * as stockCorrections from '@/actions/App/Http/Controllers/KoreksiStokController';
@@ -75,11 +73,6 @@ const masterDataNavItems: NavItem[] = [
         icon: BookUser,
     },
     {
-        title: 'Peralatan',
-        href: equipments.index(),
-        icon: Wrench,
-    },
-    {
         title: 'Metode Pembayaran',
         href: paymentMethods.index(),
         icon: BadgeDollarSign,
@@ -96,11 +89,6 @@ const financeNavItems: NavItem[] = [
         title: 'Modal',
         href: modals.index(),
         icon: ChartCandlestick
-    },
-    {
-        title: 'Biaya Operasional',
-        href: expenses.index(),
-        icon: Activity
     },
     {
         title: 'Patungan Partner',

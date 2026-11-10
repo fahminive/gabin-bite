@@ -18,7 +18,6 @@ interface Props {
         persediaanBahan: number;
         persediaanProduk: number;
         totalAsetLancar: number;
-        peralatan: number;
         totalAset: number;
     };
     liabilities: {
@@ -101,7 +100,7 @@ export default function BalanceSheet({
 
                 {/* Print Title */}
                 <div className="hidden print:block text-center mb-6">
-                    <h1 className="text-2xl font-bold">GABINBITE.PWT — LAPORAN NERACA KEUANGAN</h1>
+                    <h1 className="text-2xl font-bold">GABINBITE.PWT - LAPORAN NERACA KEUANGAN</h1>
                     <p className="text-sm text-muted-foreground">
                         Per Tanggal: {date}
                     </p>
@@ -164,19 +163,6 @@ export default function BalanceSheet({
                                     <div className="flex justify-between items-center text-sm font-bold bg-muted/30 p-2 rounded">
                                         <span>Total Aset Lancar</span>
                                         <span>{formatRupiah(assets.totalAsetLancar)}</span>
-                                    </div>
-                                </div>
-
-                                {/* ASET TETAP */}
-                                <div className="space-y-2">
-                                    <h4 className="font-bold text-xs text-muted-foreground tracking-wider uppercase">Aset Tetap</h4>
-                                    <div className="flex justify-between items-center text-sm border-b py-2 pl-4">
-                                        <span>Peralatan & Mesin</span>
-                                        <span className="font-semibold">{formatRupiah(assets.peralatan)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm font-bold bg-muted/30 p-2 rounded">
-                                        <span>Total Aset Tetap</span>
-                                        <span>{formatRupiah(assets.peralatan)}</span>
                                     </div>
                                 </div>
                             </div>

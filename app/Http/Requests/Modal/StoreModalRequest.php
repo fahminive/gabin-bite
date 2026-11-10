@@ -15,7 +15,7 @@ class StoreModalRequest extends FormRequest
     {
         return [
             'nominal' => 'required|numeric|min:0',
-            'tipe' => 'required|string|in:Uang Tunai,Peralatan / Aset,Lainnya',
+            'tipe' => 'required|string|in:Uang Tunai,Lainnya',
             'keterangan' => 'nullable|string',
         ];
     }

@@ -3,8 +3,7 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { Link, router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, ArrowUpDown, Timer } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Pencil, Trash2, ArrowUpDown } from 'lucide-react';
 import * as products from '@/actions/App/Http/Controllers/ProdukController';
 import {
   AlertDialog,
@@ -56,24 +55,6 @@ export const columns: ColumnDef<Produk>[] = [
     header: "Stok",
     cell: ({ row }) => {
       return `${row.original.stok} ${row.original.satuan}`
-    }
-  },
-  {
-    accessorKey: "terjual_seumur_hidup",
-    header: "Terjual ⏳",
-    cell: ({ row }) => {
-      const v = row.original.terjual_seumur_hidup ?? 0
-      return <span className="font-semibold text-emerald-600 dark:text-emerald-400">{v}</span>
-    }
-  },
-  {
-    accessorKey: "belum_diserahkan",
-    header: "Belum diserahkan",
-    cell: ({ row }) => {
-      const v = row.original.belum_diserahkan ?? 0
-      return v > 0
-        ? <Badge variant="outline" className="text-amber-600 dark:text-amber-400">{v}</Badge>
-        : <span className="text-muted-foreground">0</span>
     }
   },
   {

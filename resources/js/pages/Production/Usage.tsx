@@ -46,7 +46,7 @@ export default function ProductionUsage({ batch, usage: usages }: Props) {
 
     return (
         <>
-            <Head title={`Pemakaian Bahan — ${batch.produk?.nama_produk ?? 'Batch ' + batch.id}`} />
+            <Head title={`Pemakaian Bahan - ${batch.produk?.nama_produk ?? 'Batch ' + batch.id}`} />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-2xl p-3 sm:p-5">
 
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

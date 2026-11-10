@@ -6,10 +6,8 @@ use App\Http\Controllers\BahanBakuController;
 use App\Http\Controllers\ProdukController;
 use App\Http\Controllers\PemasokController;
 use App\Http\Controllers\PelangganController;
-use App\Http\Controllers\PeralatanController;
 use App\Http\Controllers\MetodePembayaranController;
 use App\Http\Controllers\ModalController;
-use App\Http\Controllers\PengeluaranOperasionalController;
 use App\Http\Controllers\KasController;
 use App\Http\Controllers\PembelianController;
 use App\Http\Controllers\ProduksiController;
@@ -42,11 +40,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('products', ProdukController::class)->except(['index', 'show']);
         Route::resource('suppliers', PemasokController::class)->except(['index', 'show']);
         Route::resource('customers', PelangganController::class)->except(['index', 'show']);
-        Route::resource('equipments', PeralatanController::class)->except(['index', 'show']);
         Route::resource('payment-methods', MetodePembayaranController::class)->except(['index', 'show']);
         Route::resource('modals', ModalController::class)->except(['index', 'show']);
-        Route::resource('operational-expenses', PengeluaranOperasionalController::class)->except(['index', 'show']);
-        Route::resource('cash', KasController::class)->except(['index', 'show']);
+        Route::resource('cash', KasController::class)->only(['store', 'update', 'destroy']);
 
         // Transaksi
         Route::resource('purchases', PembelianController::class)->except(['index', 'show']);
@@ -61,6 +57,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('split-bills/transfers', [SplitBillController::class, 'storeTransfer'])->name('split-bills.transfers.store');
         Route::put('split-bills/transfers/{transfer}', [SplitBillController::class, 'updateTransfer'])->name('split-bills.transfers.update');
         Route::delete('split-bills/transfers/{transfer}', [SplitBillController::class, 'destroyTransfer'])->name('split-bills.transfers.destroy');
+        Route::post('split-bills/adjustments', [SplitBillController::class, 'storeAdjustment'])->name('split-bills.adjustments.store');
+        Route::put('split-bills/adjustments/{adjustment}', [SplitBillController::class, 'updateAdjustment'])->name('split-bills.adjustments.update');
+        Route::delete('split-bills/adjustments/{adjustment}', [SplitBillController::class, 'destroyAdjustment'])->name('split-bills.adjustments.destroy');
         Route::post('split-bills/{splitTagihan}/settle', [SplitBillController::class, 'settle'])->name('split-bills.settle');
     });
 
@@ -70,11 +69,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('products', ProdukController::class)->only(['index', 'show']);
     Route::resource('suppliers', PemasokController::class)->only(['index', 'show']);
     Route::resource('customers', PelangganController::class)->only(['index', 'show']);
-    Route::resource('equipments', PeralatanController::class)->only(['index', 'show']);
     Route::resource('payment-methods', MetodePembayaranController::class)->only(['index', 'show']);
     Route::resource('modals', ModalController::class)->only(['index', 'show']);
-    Route::resource('operational-expenses', PengeluaranOperasionalController::class)->only(['index', 'show']);
-    Route::resource('cash', KasController::class)->only(['index', 'show']);
+    Route::resource('cash', KasController::class)->only(['index']);
 
     // Transaksi
     Route::resource('purchases', PembelianController::class)->only(['index', 'show']);

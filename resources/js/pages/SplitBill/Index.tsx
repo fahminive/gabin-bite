@@ -1,16 +1,13 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
     Split,
-    UserCheck,
     Calendar,
     Filter,
-    ShieldCheck,
-    Clock,
     ArrowRightLeft,
     Pencil,
     Trash2,
-    X,
     Plus,
+    SlidersHorizontal,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
@@ -29,40 +26,34 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { formatRupiah } from '@/lib/utils';
 
 interface Mitra {
     id: number;
     kode: string;
     nama: string;
-    user?: {
-        id: number;
-        name: string;
-        email: string;
-    };
+    email?: string | null;
 }
 
 interface Balance {
     id: number;
     nama: string;
     kode: string;
-    user_id?: number | null;
-    email?: string | null;
     dibayar: number;
     bagian: number;
     dana_pribadi_masuk: number;
     dana_pribadi_keluar: number;
+    penyesuaian: number;
     transfer_keluar: number;
     transfer_masuk: number;
     saldo: number;
-}
-
-interface SplitTagihan {
-    id: number;
-    mitra_id: number;
-    bagian: number;
-    status: 'lunas' | 'belum_lunas';
-    mitra?: Mitra;
 }
 
 interface Obligation {
@@ -79,23 +70,19 @@ interface Obligations {
     grandTotal: number;
 }
 
-interface Purchase {
+interface Adjustment {
     id: number;
-    nama_pembelian: string;
-    total: number;
-    created_at: string;
-    mitra?: Mitra;
-    split_tagihans?: SplitTagihan[];
-}
-
-interface Expense {
-    id: number;
-    kategori: string;
-    keterangan?: string | null;
-    nominal: number;
+    mitra_id: number;
+    nominal: number | string;
     tanggal: string;
-    mitra?: Mitra;
-    split_tagihans?: SplitTagihan[];
+    pre_order_id?: number | null;
+    keterangan?: string | null;
+    mitra?: Mitra | null;
+    pre_order?: {
+        id: number;
+        kode: string;
+        keterangan: string;
+    } | null;
 }
 
 interface Transfer {
@@ -122,8 +109,7 @@ interface Props {
     mitras: Mitra[];
     balances: Balance[];
     obligations: Obligations;
-    purchases: Purchase[];
-    expenses: Expense[];
+    adjustments: Adjustment[];
     transfers: Transfer[];
     batches: Batch[];
     filters: {
@@ -133,14 +119,12 @@ interface Props {
     };
 }
 
-type HistoryRow = {
-    key: string;
+type AdjustmentFormData = {
+    mitra_id: string;
+    nominal: string;
     tanggal: string;
-    nama: string;
-    jenis: 'Pembelian' | 'Operasional';
-    mitra?: Mitra | null;
-    total: number;
-    splits: SplitTagihan[];
+    pre_order_id: string;
+    keterangan: string;
 };
 
 type TransferFormData = {
@@ -156,6 +140,14 @@ function today(): string {
     return new Date().toISOString().slice(0, 10);
 }
 
+const emptyAdjustment = (): AdjustmentFormData => ({
+    mitra_id: '',
+    nominal: '',
+    tanggal: today(),
+    pre_order_id: '',
+    keterangan: '',
+});
+
 const emptyTransfer = (): TransferFormData => ({
     dari_mitra_id: '',
     ke_mitra_id: '',
@@ -165,12 +157,18 @@ const emptyTransfer = (): TransferFormData => ({
     keterangan: '',
 });
 
+/** Tampilkan nilai +/- dengan tanda jelas: +Rp12.000 / -Rp5.000. */
+function signedRupiah(value: number): string {
+    const abs = Math.abs(value);
+
+    return `${value < 0 ? '-' : '+'}${formatRupiah(abs)}`;
+}
+
 export default function SplitBillIndex({
     mitras,
     balances,
     obligations,
-    purchases,
-    expenses,
+    adjustments,
     transfers,
     batches,
     filters,
@@ -178,36 +176,13 @@ export default function SplitBillIndex({
     const [startDate, setStartDate] = useState(filters?.startDate || '');
     const [endDate, setEndDate] = useState(filters?.endDate || '');
     const [batchId, setBatchId] = useState(String(filters?.pre_order_id ?? ''));
-    const [editing, setEditing] = useState<Transfer | null>(null);
+    const [editingAdjustment, setEditingAdjustment] = useState<Adjustment | null>(null);
+    const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
 
-    const form = useForm<TransferFormData>(emptyTransfer());
+    const adjForm = useForm<AdjustmentFormData>(emptyAdjustment());
+    const trfForm = useForm<TransferFormData>(emptyTransfer());
 
-    const history: HistoryRow[] = [
-        ...purchases.map(
-            (p): HistoryRow => ({
-                key: `pembelian-${p.id}`,
-                tanggal: p.created_at,
-                nama: p.nama_pembelian,
-                jenis: 'Pembelian',
-                mitra: p.mitra,
-                total: Number(p.total),
-                splits: p.split_tagihans ?? [],
-            }),
-        ),
-        ...(expenses ?? []).map(
-            (e): HistoryRow => ({
-                key: `operasional-${e.id}`,
-                tanggal: e.tanggal,
-                nama: `${e.kategori}${e.keterangan ? ` — ${e.keterangan}` : ''}`,
-                jenis: 'Operasional',
-                mitra: e.mitra,
-                total: Number(e.nominal),
-                splits: e.split_tagihans ?? [],
-            }),
-        ),
-    ].sort(
-        (a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime(),
-    );
+    const mitraName = (id: number) => mitras.find((m) => m.id === id)?.nama ?? `#${id}`;
 
     const buildFilterQuery = () => {
         const data: Record<string, string> = {};
@@ -243,41 +218,80 @@ export default function SplitBillIndex({
         });
     };
 
-    const handleSettle = (tagihanId: number) => {
-        router.post(`/split-bills/${tagihanId}/settle`);
+    const resetAdjustmentForm = () => {
+        setEditingAdjustment(null);
+        adjForm.setData(emptyAdjustment());
+        adjForm.clearErrors();
+    };
+
+    const startEditAdjustment = (adjustment: Adjustment) => {
+        setEditingAdjustment(adjustment);
+        adjForm.setData({
+            mitra_id: String(adjustment.mitra_id),
+            nominal: String(Number(adjustment.nominal)),
+            tanggal: adjustment.tanggal?.slice(0, 10) ?? today(),
+            pre_order_id: adjustment.pre_order_id ? String(adjustment.pre_order_id) : '',
+            keterangan: adjustment.keterangan ?? '',
+        });
+        adjForm.clearErrors();
+    };
+
+    const submitAdjustment = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        if (editingAdjustment) {
+            adjForm.put(`/split-bills/adjustments/${editingAdjustment.id}`, {
+                preserveScroll: true,
+                onSuccess: () => resetAdjustmentForm(),
+            });
+        } else {
+            adjForm.post('/split-bills/adjustments', {
+                preserveScroll: true,
+                onSuccess: () => resetAdjustmentForm(),
+            });
+        }
+    };
+
+    const deleteAdjustment = (adjustment: Adjustment) => {
+        router.delete(`/split-bills/adjustments/${adjustment.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                if (editingAdjustment?.id === adjustment.id) {
+                    resetAdjustmentForm();
+                }
+            },
+        });
     };
 
     const resetTransferForm = () => {
-        setEditing(null);
-        form.setData(emptyTransfer());
-        form.clearErrors();
+        setEditingTransfer(null);
+        trfForm.setData(emptyTransfer());
+        trfForm.clearErrors();
     };
 
     const startEditTransfer = (transfer: Transfer) => {
-        setEditing(transfer);
-        form.setData({
+        setEditingTransfer(transfer);
+        trfForm.setData({
             dari_mitra_id: String(transfer.dari_mitra_id),
             ke_mitra_id: String(transfer.ke_mitra_id),
-            nominal: String(Number(transfer.nominal)),
+            nominal: String(Math.abs(Number(transfer.nominal))),
             tanggal: transfer.tanggal?.slice(0, 10) ?? today(),
-            pre_order_id: transfer.pre_order_id
-                ? String(transfer.pre_order_id)
-                : '',
+            pre_order_id: transfer.pre_order_id ? String(transfer.pre_order_id) : '',
             keterangan: transfer.keterangan ?? '',
         });
-        form.clearErrors();
+        trfForm.clearErrors();
     };
 
     const submitTransfer = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
-        if (editing) {
-            form.put(`/split-bills/transfers/${editing.id}`, {
+        if (editingTransfer) {
+            trfForm.put(`/split-bills/transfers/${editingTransfer.id}`, {
                 preserveScroll: true,
                 onSuccess: () => resetTransferForm(),
             });
         } else {
-            form.post('/split-bills/transfers', {
+            trfForm.post('/split-bills/transfers', {
                 preserveScroll: true,
                 onSuccess: () => resetTransferForm(),
             });
@@ -288,7 +302,7 @@ export default function SplitBillIndex({
         router.delete(`/split-bills/transfers/${transfer.id}`, {
             preserveScroll: true,
             onSuccess: () => {
-                if (editing?.id === transfer.id) {
+                if (editingTransfer?.id === transfer.id) {
                     resetTransferForm();
                 }
             },
@@ -297,815 +311,639 @@ export default function SplitBillIndex({
 
     return (
         <>
-            <Head title="Split Bill Partner & Monitoring Akun" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                {/* Header */}
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-                            <Split className="h-6 w-6 text-primary" />
-                            Monitoring Keuangan Akun Partner (Split Bill)
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Pencatatan talangan belanja, pembagian proporsi,
-                            pembayaran antar partner, dan status saldo per akun
-                            partner.
-                        </p>
-                    </div>
+            <Head title="Patungan Partner" />
 
-                    {/* Filter Rentang Waktu & Batch */}
-                    <div className="flex w-full flex-col flex-wrap items-stretch gap-2 rounded-2xl border bg-muted/40 p-2.5 sm:flex-row sm:items-center lg:w-auto">
-                        <div className="flex w-full items-center gap-2 sm:w-auto">
-                            <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <div className="grid flex-1 grid-cols-2 gap-1.5">
+            <div className="flex h-full flex-1 flex-col gap-4 p-4 sm:gap-6 md:p-6">
+                {/* Filter */}
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardHeader className="pb-2 p-4">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold">
+                            <Filter className="h-4 w-4 text-primary" />
+                            Filter
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Dari tanggal
+                                </label>
                                 <Input
                                     type="date"
                                     value={startDate}
-                                    onChange={(e) =>
-                                        setStartDate(e.target.value)
-                                    }
-                                    className="h-9 w-full rounded-lg text-xs"
-                                    aria-label="Tanggal mulai filter"
+                                    onChange={(e) => setStartDate(e.target.value)}
                                 />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Sampai tanggal
+                                </label>
                                 <Input
                                     type="date"
                                     value={endDate}
                                     onChange={(e) => setEndDate(e.target.value)}
-                                    className="h-9 w-full rounded-lg text-xs"
-                                    aria-label="Tanggal akhir filter"
                                 />
                             </div>
-                        </div>
-                        <div className="flex w-full items-center gap-2 sm:w-auto">
-                            <select
-                                value={batchId}
-                                onChange={(e) => setBatchId(e.target.value)}
-                                aria-label="Filter batch"
-                                className="h-9 flex-1 rounded-xl border border-input bg-card px-2.5 text-xs sm:w-44"
-                            >
-                                <option value="">Semua batch</option>
-                                {batches.map((batch) => (
-                                    <option key={batch.id} value={batch.id}>
-                                        {batch.kode} — {batch.keterangan}
-                                    </option>
-                                ))}
-                            </select>
-                            <Button
-                                size="sm"
-                                onClick={handleApplyFilter}
-                                className="flex h-9 items-center justify-center gap-1 rounded-xl px-3 text-xs"
-                            >
-                                <Filter className="h-3.5 w-3.5" /> Filter
-                            </Button>
-                            {(startDate || endDate || batchId) && (
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={handleResetFilter}
-                                    className="h-9 rounded-xl px-2.5 text-xs"
-                                >
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Batch Pre-Order
+                                </label>
+                                <Select value={batchId || 'all'} onValueChange={(v) => setBatchId(v === 'all' ? '' : v)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Semua batch" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Semua batch</SelectItem>
+                                        {batches.map((batch) => (
+                                            <SelectItem key={batch.id} value={String(batch.id)}>
+                                                {batch.kode} - {batch.keterangan}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-end gap-2">
+                                <Button size="sm" onClick={handleApplyFilter}>
+                                    Terapkan
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={handleResetFilter}>
                                     Reset
                                 </Button>
-                            )}
+                            </div>
                         </div>
-                    </div>
-                </div>
+                    </CardContent>
+                </Card>
 
-                {/* 3 KARTU HARD AKUN PARTNER DI LAYAR */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {balances.map((b) => {
-                        const isSurplus = b.saldo >= 0;
-
-                        return (
-                            <Card
-                                key={b.id}
-                                className="overflow-hidden border-2 shadow-sm"
-                            >
-                                <CardHeader className="bg-muted/30 pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <Badge
-                                            variant="outline"
-                                            className="text-sm font-bold"
-                                        >
-                                            Partner {b.kode}
-                                        </Badge>
-                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                            <UserCheck className="h-3.5 w-3.5 text-primary" />
-                                            {b.email ||
-                                                `partner.${b.kode.toLowerCase()}@gabinbite.pwt`}
-                                        </span>
-                                    </div>
-                                    <CardTitle className="mt-2 text-lg">
-                                        {b.nama}
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-3 pt-4">
-                                    <div className="flex justify-between border-b pb-2 text-xs">
-                                        <span className="text-muted-foreground">
-                                            Total Belanja Ditalangi:
-                                        </span>
-                                        <span className="font-semibold text-foreground">
-                                            {formatRupiah(b.dibayar)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between border-b pb-2 text-xs">
-                                        <span className="text-muted-foreground">
-                                            Kewajiban Patungan (1/3):
-                                        </span>
-                                        <span className="font-semibold text-foreground">
-                                            {formatRupiah(b.bagian)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between border-b pb-2 text-xs">
-                                        <span className="text-muted-foreground">
-                                            Dana Pribadi (Setor − Tarik):
-                                        </span>
-                                        <span className="font-semibold text-foreground">
-                                            {formatRupiah(b.dana_pribadi_masuk - b.dana_pribadi_keluar)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between border-b pb-2 text-xs">
-                                        <span className="text-muted-foreground">
-                                            Sudah Dibayarkan ke Partner:
-                                        </span>
-                                        <span className="font-semibold text-foreground">
-                                            {formatRupiah(b.transfer_keluar)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between border-b pb-2 text-xs">
-                                        <span className="text-muted-foreground">
-                                            Diterima dari Partner:
-                                        </span>
-                                        <span className="font-semibold text-foreground">
-                                            {formatRupiah(b.transfer_masuk)}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between pt-1">
-                                        <span className="text-xs font-bold uppercase">
-                                            Status Saldo:
-                                        </span>
-                                        <div className="text-right">
-                                            <span
-                                                className={`text-base font-extrabold ${isSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}
-                                            >
-                                                {isSurplus
-                                                    ? `+${formatRupiah(b.saldo)}`
-                                                    : formatRupiah(b.saldo)}
-                                            </span>
-                                            <p className="text-[10px] text-muted-foreground">
-                                                {isSurplus
-                                                    ? 'Hak terima pergantian'
-                                                    : 'Wajib mengganti talangan'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </div>
-
-                {/* DETAIL TUNGGAKAN PER PASANGAN MEMBER */}
-                <Card className="shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                            <UserCheck className="h-4 w-4 shrink-0 text-primary" />
-                            Detail Tunggakan per Pasangan Member
+                {/* Saldo per partner */}
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardHeader className="pb-2 p-4">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold">
+                            <Split className="h-4 w-4 text-primary" />
+                            Saldo Partner
+                            <span className="text-xs font-normal text-muted-foreground">
+                                uang yang ditangani dikurangi bagian patungan,
+                                plus dana pribadi, penyesuaian, dan transfer
+                            </span>
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <p className="mb-4 text-xs text-muted-foreground">
-                            Berdasarkan split tagihan yang belum lunas, ini
-                            adalah total yang{'\n'}
-                            harus dibayar setiap member kepada member lain.
-                            Contoh: Fahmi ke Nalwa berapa, serta Fahmi ke Widya
-                            berapa.
-                        </p>
+                    <CardContent className="p-4 pt-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="w-full min-w-[760px] text-sm">
                                 <thead>
-                                    <tr className="border-b text-xs text-muted-foreground uppercase">
-                                        <th className="pb-3 text-left font-medium">
-                                            Yang Utang
-                                        </th>
-                                        {obligations.mitras.map((m) => (
-                                            <th
-                                                key={m.id}
-                                                className="pb-3 text-right font-medium"
-                                            >
-                                                Ke {m.kode} ({m.nama})
-                                            </th>
-                                        ))}
-                                        <th className="w-32 pb-3 text-right font-medium">
-                                            Total Harus Dibayar
-                                        </th>
+                                    <tr className="border-b text-left text-xs text-muted-foreground">
+                                        <th className="pb-2 pr-3 font-semibold">Partner</th>
+                                        <th className="pb-2 pr-3 font-semibold">Ditalangi</th>
+                                        <th className="pb-2 pr-3 font-semibold">Bagian Patungan</th>
+                                        <th className="pb-2 pr-3 font-semibold">Dana Pribadi</th>
+                                        <th className="pb-2 pr-3 font-semibold">Penyesuaian</th>
+                                        <th className="pb-2 pr-3 font-semibold">Transfer</th>
+                                        <th className="pb-2 pr-3 font-semibold">Saldo</th>
+                                        <th className="pb-2 font-semibold text-right">Aksi</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y text-xs">
-                                    {obligations.mitras.map((debtor) => {
-                                        const row =
-                                            obligations.matrix[debtor.id] ?? {};
+                                <tbody className="divide-y">
+                                    {balances.map((balance) => {
+                                        const danaPribadi =
+                                            Number(balance.dana_pribadi_masuk) -
+                                            Number(balance.dana_pribadi_keluar);
+                                        const transfer =
+                                            Number(balance.transfer_masuk) -
+                                            Number(balance.transfer_keluar);
 
                                         return (
-                                            <tr
-                                                key={debtor.id}
-                                                className="hover:bg-muted/10"
-                                            >
-                                                <td className="py-3 font-semibold text-foreground">
-                                                    {debtor.kode} —{' '}
-                                                    {debtor.nama}
+                                            <tr key={balance.id}>
+                                                <td className="py-2.5 pr-3 font-medium">
+                                                    {balance.nama}
+                                                    <span className="ml-1.5 text-xs text-muted-foreground">
+                                                        {balance.kode}
+                                                    </span>
                                                 </td>
-                                                {obligations.mitras.map(
-                                                    (creditor) => (
-                                                        <td
-                                                            key={creditor.id}
-                                                            className="py-3 text-right"
-                                                        >
-                                                            {debtor.id ===
-                                                            creditor.id ? (
-                                                                <span className="text-muted-foreground">
-                                                                    —
-                                                                </span>
-                                                            ) : (
-                                                                <>
-                                                                    {formatRupiah(
-                                                                        row[
-                                                                            creditor
-                                                                                .id
-                                                                        ] ?? 0,
-                                                                    )}
-                                                                </>
-                                                            )}
-                                                        </td>
-                                                    ),
-                                                )}
-                                                <td className="py-3 text-right font-semibold">
-                                                    {formatRupiah(
-                                                        obligations
-                                                            .totalByDebtor[
-                                                            debtor.id
-                                                        ] ?? 0,
-                                                    )}
+                                                <td className="py-2.5 pr-3">
+                                                    {formatRupiah(Number(balance.dibayar))}
+                                                </td>
+                                                <td className="py-2.5 pr-3 text-red-600 dark:text-red-400">
+                                                    {formatRupiah(Number(balance.bagian))}
+                                                </td>
+                                                <td className="py-2.5 pr-3">
+                                                    {danaPribadi !== 0
+                                                        ? signedRupiah(danaPribadi)
+                                                        : <span className="text-muted-foreground">0</span>}
+                                                </td>
+                                                <td className="py-2.5 pr-3">
+                                                    {Number(balance.penyesuaian) !== 0
+                                                        ? signedRupiah(Number(balance.penyesuaian))
+                                                        : <span className="text-muted-foreground">0</span>}
+                                                </td>
+                                                <td className="py-2.5 pr-3">
+                                                    {transfer !== 0
+                                                        ? signedRupiah(transfer)
+                                                        : <span className="text-muted-foreground">0</span>}
+                                                </td>
+                                                <td className="py-2.5 pr-3 font-semibold">
+                                                    <Badge
+                                                        variant={
+                                                            balance.saldo === 0
+                                                                ? 'secondary'
+                                                                : balance.saldo > 0
+                                                                    ? 'outline'
+                                                                    : 'destructive'
+                                                        }
+                                                        className="text-xs"
+                                                    >
+                                                        {formatRupiah(Number(balance.saldo))}
+                                                    </Badge>
+                                                    <span className="ml-1.5 text-[10px] text-muted-foreground">
+                                                        {balance.saldo > 0 ? 'patungan utang ke dia' : balance.saldo < 0 ? 'dia utang patungan' : ''} 
+                                                    </span>
+                                                </td>
+                                                <td className="py-2.5 text-right">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            resetAdjustmentForm();
+                                                            adjForm.setData('mitra_id', String(balance.id));
+                                                            document
+                                                                .getElementById('penyesuaian')
+                                                                ?.scrollIntoView({ behavior: 'smooth' });
+                                                        }}
+                                                    >
+                                                        <Plus className="mr-1 h-3.5 w-3.5" />
+                                                        Penyesuaian
+                                                    </Button>
                                                 </td>
                                             </tr>
                                         );
                                     })}
-                                    <tr className="border-t bg-muted/50 font-semibold">
-                                        <td className="py-3 text-left">
-                                            Total Harus Diterima
-                                        </td>
-                                        {obligations.mitras.map((creditor) => (
-                                            <td
-                                                key={creditor.id}
-                                                className="py-3 text-right"
-                                            >
-                                                {formatRupiah(
-                                                    obligations.totalByCreditor[
-                                                        creditor.id
-                                                    ] ?? 0,
-                                                )}
-                                            </td>
-                                        ))}
-                                        <td className="py-3 text-right">
-                                            {formatRupiah(
-                                                obligations.grandTotal,
-                                            )}
-                                        </td>
-                                    </tr>
                                 </tbody>
                             </table>
                         </div>
-                        {obligations.grandTotal === 0 && (
-                            <p className="mt-3 text-center text-xs text-muted-foreground">
-                                Tidak ada tunggakan split bill yang belum lunas
-                                saat ini.
-                            </p>
-                        )}
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            Saldo positif berarti sumbangan partner lebih dari bagiannya
+                            (patungan berutang ke dia). Saldo negatif berarti bagian patungan
+                            partner melebihi yang ia keluarkan (dia harus menyetor).
+                        </p>
                     </CardContent>
                 </Card>
 
-                {/* FORM PEMBAYARAN ANTAR PARTNER */}
-                <Card className="shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center justify-between gap-2 text-base font-semibold">
-                            <span className="flex items-center gap-2">
-                                <ArrowRightLeft className="h-4 w-4 text-primary" />
-                                {editing
-                                    ? 'Edit Pembayaran Antar Partner'
-                                    : 'Catat Pembayaran Antar Partner'}
+                {/* Penyesuaian manual */}
+                <Card id="penyesuaian" className="rounded-2xl border border-border/80 shadow-xs scroll-mt-24">
+                    <CardHeader className="pb-2 p-4">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold">
+                            <SlidersHorizontal className="h-4 w-4 text-primary" />
+                            Penyesuaian Manual
+                            <span className="text-xs font-normal text-muted-foreground">
+                                logika seperti penyesuaian stok: tambah (+) untuk
+                                pengeluaran yang belum tercatat, kurangi (-) untuk
+                                pemasukan/potongan
                             </span>
-                            {editing && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={resetTransferForm}
-                                >
-                                    <X className="mr-1 h-4 w-4" /> Batal Edit
-                                </Button>
-                            )}
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-4 pt-0 space-y-4">
                         <form
-                            onSubmit={submitTransfer}
-                            className="grid gap-3 md:grid-cols-2 lg:grid-cols-3"
+                            onSubmit={submitAdjustment}
+                            className="grid gap-3 rounded-xl border bg-muted/30 p-3 sm:grid-cols-6"
                         >
-                            <div className="grid gap-1">
-                                <label className="text-xs text-muted-foreground">
-                                    Dari Partner (yang membayar)
+                            <div className="sm:col-span-2">
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Partner
                                 </label>
-                                <select
-                                    value={form.data.dari_mitra_id}
-                                    onChange={(e) =>
-                                        form.setData(
-                                            'dari_mitra_id',
-                                            e.target.value,
-                                        )
-                                    }
-                                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                                    aria-label="Dari partner"
+                                <Select
+                                    value={adjForm.data.mitra_id}
+                                    onValueChange={(v) => adjForm.setData('mitra_id', v)}
                                 >
-                                    <option value="">
-                                        Pilih partner pembayar
-                                    </option>
-                                    {mitras.map((m) => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.kode} — {m.nama}
-                                        </option>
-                                    ))}
-                                </select>
-                                {form.errors.dari_mitra_id && (
-                                    <p className="text-xs text-destructive">
-                                        {form.errors.dari_mitra_id}
-                                    </p>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Pilih partner" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {mitras.map((mitra) => (
+                                            <SelectItem key={mitra.id} value={String(mitra.id)}>
+                                                {mitra.nama}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {adjForm.errors.mitra_id && (
+                                    <p className="mt-1 text-xs text-red-600">{adjForm.errors.mitra_id}</p>
                                 )}
                             </div>
-
-                            <div className="grid gap-1">
-                                <label className="text-xs text-muted-foreground">
-                                    Ke Partner (yang menerima)
-                                </label>
-                                <select
-                                    value={form.data.ke_mitra_id}
-                                    onChange={(e) =>
-                                        form.setData(
-                                            'ke_mitra_id',
-                                            e.target.value,
-                                        )
-                                    }
-                                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                                    aria-label="Ke partner"
-                                >
-                                    <option value="">
-                                        Pilih partner penerima
-                                    </option>
-                                    {mitras.map((m) => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.kode} — {m.nama}
-                                        </option>
-                                    ))}
-                                </select>
-                                {form.errors.ke_mitra_id && (
-                                    <p className="text-xs text-destructive">
-                                        {form.errors.ke_mitra_id}
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="grid gap-1">
-                                <label className="text-xs text-muted-foreground">
-                                    Nominal
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Nominal (boleh minus)
                                 </label>
                                 <Input
                                     type="number"
-                                    min="0"
                                     step="any"
-                                    value={form.data.nominal}
-                                    onChange={(e) =>
-                                        form.setData('nominal', e.target.value)
-                                    }
-                                    placeholder="0"
-                                    aria-label="Nominal pembayaran"
+                                    value={adjForm.data.nominal}
+                                    onChange={(e) => adjForm.setData('nominal', e.target.value)}
+                                    placeholder="+25000 / -5000"
                                 />
-                                {form.errors.nominal && (
-                                    <p className="text-xs text-destructive">
-                                        {form.errors.nominal}
-                                    </p>
+                                {adjForm.errors.nominal && (
+                                    <p className="mt-1 text-xs text-red-600">{adjForm.errors.nominal}</p>
                                 )}
                             </div>
-
-                            <div className="grid gap-1">
-                                <label className="text-xs text-muted-foreground">
-                                    Tanggal Pembayaran
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Tanggal
                                 </label>
                                 <Input
                                     type="date"
-                                    value={form.data.tanggal}
-                                    onChange={(e) =>
-                                        form.setData('tanggal', e.target.value)
-                                    }
-                                    aria-label="Tanggal pembayaran"
+                                    value={adjForm.data.tanggal}
+                                    onChange={(e) => adjForm.setData('tanggal', e.target.value)}
                                 />
-                                {form.errors.tanggal && (
-                                    <p className="text-xs text-destructive">
-                                        {form.errors.tanggal}
-                                    </p>
+                                {adjForm.errors.tanggal && (
+                                    <p className="mt-1 text-xs text-red-600">{adjForm.errors.tanggal}</p>
                                 )}
                             </div>
-
-                            <div className="grid gap-1">
-                                <label className="text-xs text-muted-foreground">
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
                                     Batch (opsional)
                                 </label>
-                                <select
-                                    value={form.data.pre_order_id}
-                                    onChange={(e) =>
-                                        form.setData(
-                                            'pre_order_id',
-                                            e.target.value,
-                                        )
-                                    }
-                                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                                    aria-label="Batch pembayaran"
+                                <Select
+                                    value={adjForm.data.pre_order_id || 'none'}
+                                    onValueChange={(v) => adjForm.setData('pre_order_id', v === 'none' ? '' : v)}
                                 >
-                                    <option value="">
-                                        Tanpa batch / semua
-                                    </option>
-                                    {batches.map((batch) => (
-                                        <option key={batch.id} value={batch.id}>
-                                            {batch.kode} — {batch.keterangan}
-                                        </option>
-                                    ))}
-                                </select>
-                                {form.errors.pre_order_id && (
-                                    <p className="text-xs text-destructive">
-                                        {form.errors.pre_order_id}
-                                    </p>
-                                )}
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Tanpa batch" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Tanpa batch</SelectItem>
+                                        {batches.map((batch) => (
+                                            <SelectItem key={batch.id} value={String(batch.id)}>
+                                                {batch.kode}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
-
-                            <div className="grid gap-1">
-                                <label className="text-xs text-muted-foreground">
-                                    Keterangan (opsional)
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Keterangan
                                 </label>
                                 <Input
-                                    value={form.data.keterangan}
-                                    onChange={(e) =>
-                                        form.setData(
-                                            'keterangan',
-                                            e.target.value,
-                                        )
-                                    }
-                                    placeholder="Contoh: pelunasan talangan batch 1"
-                                    aria-label="Keterangan pembayaran"
+                                    value={adjForm.data.keterangan}
+                                    onChange={(e) => adjForm.setData('keterangan', e.target.value)}
+                                    placeholder="misal bensin ambil bahan"
                                 />
-                                {form.errors.keterangan && (
-                                    <p className="text-xs text-destructive">
-                                        {form.errors.keterangan}
-                                    </p>
-                                )}
                             </div>
-
-                            <div className="flex items-end md:col-span-2 lg:col-span-3">
-                                <Button
-                                    type="submit"
-                                    disabled={form.processing}
-                                >
-                                    {editing ? (
-                                        <>
-                                            <Pencil className="mr-2 h-4 w-4" />{' '}
-                                            Simpan Perubahan
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Plus className="mr-2 h-4 w-4" />{' '}
-                                            Simpan Pembayaran
-                                        </>
-                                    )}
+                            <div className="flex items-end gap-2 sm:col-span-6">
+                                <Button size="sm" disabled={adjForm.processing}>
+                                    {editingAdjustment ? `Simpan untuk ${mitraName(Number(editingAdjustment.mitra_id))}` : 'Tambah Penyesuaian'}
                                 </Button>
+                                {editingAdjustment && (
+                                    <Button size="sm" variant="outline" type="button" onClick={resetAdjustmentForm}>
+                                        Batal
+                                    </Button>
+                                )}
+                                {editingAdjustment && Number(editingAdjustment.nominal) < 0 && (
+                                    <span className="pb-1 text-xs text-muted-foreground">
+                                        penyesuaian ini minus (potongan);
+                                        saat diedit tetap minus kecuali
+                                        nominalnya diubah
+                                    </span>
+                                )}
                             </div>
                         </form>
                     </CardContent>
                 </Card>
-
-                {/* RIWAYAT PEMBAYARAN ANTAR PARTNER */}
-                <Card className="shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-base font-semibold">
-                            Riwayat Pembayaran Antar Partner
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="w-full min-w-[560px] text-sm">
                                 <thead>
-                                    <tr className="border-b text-xs text-muted-foreground uppercase">
-                                        <th className="pb-3 text-left font-medium">
-                                            Tanggal
-                                        </th>
-                                        <th className="pb-3 text-left font-medium">
-                                            Dari
-                                        </th>
-                                        <th className="pb-3 text-left font-medium">
-                                            Ke
-                                        </th>
-                                        <th className="pb-3 text-right font-medium">
-                                            Nominal
-                                        </th>
-                                        <th className="pb-3 pl-4 text-left font-medium">
-                                            Batch
-                                        </th>
-                                        <th className="pb-3 pl-4 text-left font-medium">
-                                            Keterangan
-                                        </th>
-                                        <th className="pb-3 text-center font-medium">
-                                            Aksi
-                                        </th>
+                                    <tr className="border-b text-left text-xs text-muted-foreground">
+                                        <th className="px-4 py-2 font-semibold">Tanggal</th>
+                                        <th className="px-4 py-2 font-semibold">Partner</th>
+                                        <th className="px-4 py-2 font-semibold">Nominal</th>
+                                        <th className="px-4 py-2 font-semibold">Batch</th>
+                                        <th className="px-4 py-2 font-semibold">Keterangan</th>
+                                        <th className="px-4 py-2 text-right font-semibold">Aksi</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y text-xs">
-                                    {transfers.length > 0 ? (
-                                        transfers.map((t) => (
-                                            <tr
-                                                key={t.id}
-                                                className="hover:bg-muted/10"
-                                            >
-                                                <td className="py-3 text-muted-foreground">
-                                                    {new Date(
-                                                        t.tanggal,
-                                                    ).toLocaleDateString(
-                                                        'id-ID',
-                                                        {
-                                                            day: 'numeric',
-                                                            month: 'short',
-                                                            year: 'numeric',
-                                                        },
-                                                    )}
-                                                </td>
-                                                <td className="py-3">
-                                                    <Badge variant="secondary">
-                                                        {t.dari_mitra
-                                                            ? `${t.dari_mitra.kode} (${t.dari_mitra.nama})`
-                                                            : `Mitra #${t.dari_mitra_id}`}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-3">
-                                                    <Badge variant="outline">
-                                                        {t.ke_mitra
-                                                            ? `${t.ke_mitra.kode} (${t.ke_mitra.nama})`
-                                                            : `Mitra #${t.ke_mitra_id}`}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-3 text-right font-bold">
-                                                    {formatRupiah(
-                                                        Number(t.nominal),
-                                                    )}
-                                                </td>
-                                                <td className="py-3 pl-4 text-muted-foreground">
-                                                    {t.pre_order
-                                                        ? `${t.pre_order.kode} — ${t.pre_order.keterangan}`
-                                                        : '-'}
-                                                </td>
-                                                <td className="py-3 pl-4 text-muted-foreground">
-                                                    {t.keterangan || '-'}
-                                                </td>
-                                                <td className="py-3">
-                                                    <div className="flex justify-center gap-1">
-                                                        <Button
-                                                            variant="outline"
-                                                            size="icon"
-                                                            className="h-7 w-7"
-                                                            title="Edit pembayaran"
-                                                            onClick={() =>
-                                                                startEditTransfer(
-                                                                    t,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Pencil className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger
-                                                                asChild
-                                                            >
-                                                                <Button
-                                                                    variant="destructive"
-                                                                    size="icon"
-                                                                    className="h-7 w-7"
-                                                                    title="Hapus pembayaran"
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>
-                                                                        Hapus
-                                                                        catatan
-                                                                        pembayaran?
-                                                                    </AlertDialogTitle>
-                                                                    <AlertDialogDescription>
-                                                                        Pembayaran{' '}
-                                                                        {t
-                                                                            .dari_mitra
-                                                                            ?.kode ??
-                                                                            `#${t.dari_mitra_id}`}{' '}
-                                                                        ke{' '}
-                                                                        {t
-                                                                            .ke_mitra
-                                                                            ?.kode ??
-                                                                            `#${t.ke_mitra_id}`}{' '}
-                                                                        sebesar{' '}
-                                                                        {formatRupiah(
-                                                                            Number(
-                                                                                t.nominal,
-                                                                            ),
-                                                                        )}{' '}
-                                                                        akan
-                                                                        dihapus
-                                                                        dan
-                                                                        saldo
-                                                                        partner
-                                                                        dihitung
-                                                                        ulang.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel>
-                                                                        Batal
-                                                                    </AlertDialogCancel>
-                                                                    <AlertDialogAction
-                                                                        className="bg-red-600 hover:bg-red-700"
-                                                                        onClick={() =>
-                                                                            deleteTransfer(
-                                                                                t,
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        Hapus
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
+                                <tbody className="divide-y">
+                                    {adjustments.length === 0 && (
                                         <tr>
-                                            <td
-                                                colSpan={7}
-                                                className="py-6 text-center text-muted-foreground"
-                                            >
-                                                Belum ada pembayaran antar
-                                                partner yang dicatat.
+                                            <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                                                Belum ada penyesuaian manual.
                                             </td>
                                         </tr>
                                     )}
+                                    {adjustments.map((adjustment) => (
+                                        <tr key={adjustment.id}>
+                                            <td className="px-4 py-2.5 whitespace-nowrap">
+                                                {adjustment.tanggal?.slice(0, 10)}
+                                            </td>
+                                            <td className="px-4 py-2.5">{adjustment.mitra?.nama ?? mitraName(adjustment.mitra_id)}</td>
+                                            <td className="px-4 py-2.5 font-semibold">
+                                                <span
+                                                    className={
+                                                        Number(adjustment.nominal) > 0
+                                                            ? 'text-emerald-600 dark:text-emerald-400'
+                                                            : 'text-red-600 dark:text-red-400'
+                                                    }
+                                                >
+                                                    {signedRupiah(Number(adjustment.nominal))}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2.5">{adjustment.pre_order?.kode ?? '-'}</td>
+                                            <td className="px-4 py-2.5">{adjustment.keterangan || '-'}</td>
+                                            <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => startEditAdjustment(adjustment)}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button size="sm" variant="ghost">
+                                                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>
+                                                                Hapus penyesuaian ini?
+                                                            </AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                {signedRupiah(Number(adjustment.nominal))} untuk
+                                                                {' '}{adjustment.mitra?.nama ?? mitraName(adjustment.mitra_id)}
+                                                                {' '}akan dihapus dan saldo partner dihitung ulang.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Batal</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => deleteAdjustment(adjustment)}>
+                                                                Hapus
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* TABEL HISTORI TRANSAKSI BELANJA & SPLIT TAGIHAN */}
-                <Card className="shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-base font-semibold">
-                            Riwayat Belanja & Operasional yang Dibagi
+                {/* Matriks tunggakan */}
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardHeader className="pb-2 p-4">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold">
+                            <Calendar className="h-4 w-4 text-primary" />
+                            Matriks Tunggakan
+                            <span className="text-xs font-normal text-muted-foreground">
+                                baris = yang harus bayar, kolom = yang menerima
+                            </span>
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-4 pt-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="w-full min-w-[480px] text-sm">
                                 <thead>
-                                    <tr className="border-b text-xs text-muted-foreground uppercase">
-                                        <th className="pb-3 text-left font-medium">
-                                            Tanggal
+                                    <tr>
+                                        <th className="pb-2 text-left text-xs font-semibold text-muted-foreground">
+                                            Bayar ke
                                         </th>
-                                        <th className="pb-3 text-left font-medium">
-                                            Jenis
-                                        </th>
-                                        <th className="pb-3 text-left font-medium">
-                                            Keterangan
-                                        </th>
-                                        <th className="pb-3 text-left font-medium">
-                                            Ditalangi Oleh
-                                        </th>
-                                        <th className="pb-3 text-right font-medium">
+                                        {obligations.mitras.map((creditor) => (
+                                            <th key={creditor.id} className="pb-2 px-2 text-xs font-semibold text-muted-foreground">
+                                                {creditor.nama}
+                                            </th>
+                                        ))}
+                                        <th className="pb-2 px-2 text-xs font-semibold text-muted-foreground">
                                             Total
-                                        </th>
-                                        <th className="pb-3 pl-6 text-left font-medium">
-                                            Rincian Split Tagihan (Partner)
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y text-xs">
-                                    {history.length > 0 ? (
-                                        history.map((row) => (
-                                            <tr
-                                                key={row.key}
-                                                className="hover:bg-muted/10"
-                                            >
-                                                <td className="py-3 text-muted-foreground">
-                                                    {new Date(
-                                                        row.tanggal,
-                                                    ).toLocaleDateString(
-                                                        'id-ID',
-                                                        {
-                                                            day: 'numeric',
-                                                            month: 'short',
-                                                            year: 'numeric',
-                                                        },
-                                                    )}
-                                                </td>
-                                                <td className="py-3">
-                                                    <Badge
-                                                        variant={
-                                                            row.jenis ===
-                                                            'Pembelian'
-                                                                ? 'default'
-                                                                : 'secondary'
-                                                        }
-                                                    >
-                                                        {row.jenis}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-3 font-semibold text-foreground">
-                                                    {row.nama}
-                                                </td>
-                                                <td className="py-3">
-                                                    <Badge variant="secondary">
-                                                        {row.mitra
-                                                            ? `${row.mitra.kode} (${row.mitra.nama})`
-                                                            : 'Kas Bersama'}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-3 text-right font-bold">
-                                                    {formatRupiah(row.total)}
-                                                </td>
-                                                <td className="py-3 pl-6">
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {row.splits.map(
-                                                            (st) => (
-                                                                <div
-                                                                    key={st.id}
-                                                                    className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] ${
-                                                                        st.status ===
-                                                                        'lunas'
-                                                                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                                                                            : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                                                                    }`}
-                                                                >
-                                                                    <span>
-                                                                        {
-                                                                            st
-                                                                                .mitra
-                                                                                ?.kode
-                                                                        }
-                                                                        :{' '}
-                                                                        {formatRupiah(
-                                                                            st.bagian,
-                                                                        )}
-                                                                    </span>
-                                                                    {st.status ===
-                                                                    'lunas' ? (
-                                                                        <ShieldCheck className="h-3 w-3 text-emerald-600" />
-                                                                    ) : (
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            className="h-5 px-1 text-[10px] hover:bg-amber-500/20"
-                                                                            onClick={() =>
-                                                                                handleSettle(
-                                                                                    st.id,
-                                                                                )
-                                                                            }
-                                                                            title="Tandai bagian ini lunas"
-                                                                        >
-                                                                            <Clock className="mr-0.5 h-2.5 w-2.5" />{' '}
-                                                                            Ganti
-                                                                        </Button>
-                                                                    )}
-                                                                </div>
-                                                            ),
+                                <tbody className="divide-y">
+                                    {obligations.mitras.map((debtor) => (
+                                        <tr key={debtor.id}>
+                                            <td className="py-2 pr-2 font-medium">{debtor.nama}</td>
+                                            {obligations.mitras.map((creditor) => {
+                                                const value =
+                                                    obligations.matrix[debtor.id]?.[creditor.id] ?? 0;
+                                                return (
+                                                    <td key={creditor.id} className="py-2 px-2 text-center">
+                                                        {debtor.id === creditor.id ? (
+                                                            <span className="text-muted-foreground">-</span>
+                                                        ) : value > 0 ? (
+                                                            <Badge variant="outline" className="text-xs">
+                                                                {formatRupiah(value)}
+                                                            </Badge>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">-</span>
                                                         )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="py-2 px-2 text-right font-semibold">
+                                                {formatRupiah(obligations.totalByDebtor[debtor.id] ?? 0)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p className="mt-2 text-xs font-semibold">
+                            Total tunggakan: {formatRupiah(obligations.grandTotal)}
+                        </p>
+                    </CardContent>
+                </Card>
+
+                {/* Transfer antar partner */}
+                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                    <CardHeader className="pb-2 p-4">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold">
+                            <ArrowRightLeft className="h-4 w-4 text-primary" />
+                            Transfer Antar Partner
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 space-y-4">
+                        <form
+                            onSubmit={submitTransfer}
+                            className="grid gap-3 rounded-xl border bg-muted/30 p-3 sm:grid-cols-6"
+                        >
+                            <div className="sm:col-span-2">
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Dari partner
+                                </label>
+                                <Select
+                                    value={trfForm.data.dari_mitra_id}
+                                    onValueChange={(v) => trfForm.setData('dari_mitra_id', v)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Pilih pembayar" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {mitras.map((mitra) => (
+                                            <SelectItem key={mitra.id} value={String(mitra.id)}>
+                                                {mitra.nama}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {trfForm.errors.dari_mitra_id && (
+                                    <p className="mt-1 text-xs text-red-600">{trfForm.errors.dari_mitra_id}</p>
+                                )}
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Ke partner
+                                </label>
+                                <Select
+                                    value={trfForm.data.ke_mitra_id}
+                                    onValueChange={(v) => trfForm.setData('ke_mitra_id', v)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Pilih penerima" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {mitras.map((mitra) => (
+                                            <SelectItem key={mitra.id} value={String(mitra.id)}>
+                                                {mitra.nama}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {trfForm.errors.ke_mitra_id && (
+                                    <p className="mt-1 text-xs text-red-600">{trfForm.errors.ke_mitra_id}</p>
+                                )}
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Nominal
+                                </label>
+                                <Input
+                                    type="number"
+                                    step="any"
+                                    value={trfForm.data.nominal}
+                                    onChange={(e) => trfForm.setData('nominal', e.target.value)}
+                                />
+                                {trfForm.errors.nominal && (
+                                    <p className="mt-1 text-xs text-red-600">{trfForm.errors.nominal}</p>
+                                )}
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Tanggal
+                                </label>
+                                <Input
+                                    type="date"
+                                    value={trfForm.data.tanggal}
+                                    onChange={(e) => trfForm.setData('tanggal', e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Batch
+                                </label>
+                                <Select
+                                    value={trfForm.data.pre_order_id || 'none'}
+                                    onValueChange={(v) => trfForm.setData('pre_order_id', v === 'none' ? '' : v)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Tanpa batch" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Tanpa batch</SelectItem>
+                                        {batches.map((batch) => (
+                                            <SelectItem key={batch.id} value={String(batch.id)}>
+                                                {batch.kode}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                    Keterangan
+                                </label>
+                                <Input
+                                    value={trfForm.data.keterangan}
+                                    onChange={(e) => trfForm.setData('keterangan', e.target.value)}
+                                />
+                            </div>
+                            <div className="flex items-end gap-2 sm:col-span-6">
+                                <Button size="sm" disabled={trfForm.processing}>
+                                    {editingTransfer ? 'Simpan Perubahan' : 'Catat Transfer'}
+                                </Button>
+                                {editingTransfer && (
+                                    <Button size="sm" variant="outline" type="button" onClick={resetTransferForm}>
+                                        Batal
+                                    </Button>
+                                )}
+                            </div>
+                        </form>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[560px] text-sm">
+                                <thead>
+                                    <tr className="border-b text-left text-xs text-muted-foreground">
+                                        <th className="py-2 pr-3 font-semibold">Tanggal</th>
+                                        <th className="py-2 pr-3 font-semibold">Dari</th>
+                                        <th className="py-2 pr-3 font-semibold">Ke</th>
+                                        <th className="py-2 pr-3 font-semibold">Nominal</th>
+                                        <th className="py-2 pr-3 font-semibold">Batch</th>
+                                        <th className="py-2 pr-3 font-semibold">Keterangan</th>
+                                        <th className="py-2 text-right font-semibold">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {transfers.length === 0 && (
                                         <tr>
-                                            <td
-                                                colSpan={6}
-                                                className="py-6 text-center text-muted-foreground"
-                                            >
-                                                Belum ada transaksi
-                                                belanja/operasional yang dibagi
-                                                split bill.
+                                            <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                                                Belum ada transfer antar partner.
                                             </td>
                                         </tr>
                                     )}
+                                    {transfers.map((transfer) => (
+                                        <tr key={transfer.id}>
+                                            <td className="py-2.5 pr-3 whitespace-nowrap">
+                                                {transfer.tanggal?.slice(0, 10)}
+                                            </td>
+                                            <td className="py-2.5 pr-3">{transfer.dari_mitra?.nama ?? transfer.dari_mitra_id}</td>
+                                            <td className="py-2.5 pr-3">{transfer.ke_mitra?.nama ?? transfer.ke_mitra_id}</td>
+                                            <td className="py-2.5 pr-3 font-semibold">{formatRupiah(Number(transfer.nominal))}</td>
+                                            <td className="py-2.5 pr-3">{transfer.pre_order?.kode ?? '-'}</td>
+                                            <td className="py-2.5 pr-3">{transfer.keterangan || '-'}</td>
+                                            <td className="py-2.5 text-right whitespace-nowrap">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => startEditTransfer(transfer)}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button size="sm" variant="ghost">
+                                                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>
+                                                                Hapus transfer ini?
+                                                            </AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Transfer {formatRupiah(Number(transfer.nominal))} dari
+                                                                {' '}{transfer.dari_mitra?.nama} ke
+                                                                {' '}{transfer.ke_mitra?.nama} akan dihapus.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Batal</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => deleteTransfer(transfer)}>
+                                                                Hapus
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
@@ -1115,10 +953,3 @@ export default function SplitBillIndex({
         </>
     );
 }
-
-SplitBillIndex.layout = {
-    breadcrumbs: [
-        { title: 'Dashboard', href: '/dashboard' },
-        { title: 'Split Bill Partner', href: '/split-bills' },
-    ],
-};
