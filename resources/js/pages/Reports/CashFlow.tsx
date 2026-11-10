@@ -12,10 +12,11 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { BatchFilter, type BatchOption } from '@/components/batch-filter';
-import { formatRupiah } from '@/lib/utils';
+import { cn, formatRupiah } from '@/lib/utils';
 import {
     ArrowDownUp,
     Calendar,
+    Landmark,
     TrendingDown,
     TrendingUp,
     Wallet,
@@ -49,6 +50,17 @@ interface Props {
     totalInflow: number;
     totalOutflow: number;
     saldoAkhir: number;
+    bridge?: {
+        saldoAkhir: number;
+        setoranModal: number;
+        danaPribadiNet: number;
+        uangMukaBelumSerahkan: number;
+        persediaanBahan: number;
+        persediaanProduk: number;
+        peralatanDibeliTunai: number;
+        cuanKas: number;
+        labaAkrual: number;
+    };
 }
 
 export default function CashFlow({
@@ -62,6 +74,7 @@ export default function CashFlow({
     totalInflow,
     totalOutflow,
     saldoAkhir,
+    bridge,
 }: Props) {
     const [filterStart, setFilterStart] = useState(startDate);
     const [filterEnd, setFilterEnd] = useState(endDate);
@@ -392,8 +405,111 @@ export default function CashFlow({
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Jembatan Saldo Kas → Cuan */}
+                {bridge && (
+                    <Card className="gap-0 overflow-hidden py-0 shadow-sm">
+                        <CardHeader className="border-b bg-muted/40 px-4 pt-4 pb-3 sm:px-6 sm:pt-5">
+                            <CardTitle className="flex flex-col gap-1 text-base font-semibold sm:flex-row sm:items-center sm:gap-2">
+                                <span className="flex items-center gap-2">
+                                    <Landmark className="h-4 w-4 text-primary" />
+                                    Jembatan: Saldo Kas → Cuan
+                                </span>
+                                <span className="text-xs font-normal text-muted-foreground">
+                                    kenapa saldo kas bukan otomatis laba
+                                </span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <div className="divide-y text-xs sm:text-sm">
+                                <BridgeRow
+                                    label="Saldo Akhir Kas"
+                                    value={bridge.saldoAkhir}
+                                    strong
+                                />
+                                <BridgeRow
+                                    label="− Setoran modal usaha (dana sendiri, bukan hasil usaha)"
+                                    value={-bridge.setoranModal}
+                                    accent="negative"
+                                />
+                                <BridgeRow
+                                    label="− Dana pribadi member (setoran − penarikan)"
+                                    value={-bridge.danaPribadiNet}
+                                    accent={bridge.danaPribadiNet >= 0 ? 'negative' : 'positive'}
+                                />
+                                <BridgeRow
+                                    label="− Uang muka pesanan yang belum diserahkan (kas sudah masuk, pendapatan belum diakui)"
+                                    value={-bridge.uangMukaBelumSerahkan}
+                                    accent="negative"
+                                />
+                                <BridgeRow
+                                    label="− Nilai persediaan saat ini (bahan + produk yang belum jadi omzet)"
+                                    value={-(bridge.persediaanBahan + bridge.persediaanProduk)}
+                                    accent="negative"
+                                />
+                                {bridge.peralatanDibeliTunai !== 0 && (
+                                    <BridgeRow
+                                        label="+ Pembelian peralatan tunai (aset investasi, bukan biaya)"
+                                        value={bridge.peralatanDibeliTunai}
+                                        accent="positive"
+                                    />
+                                )}
+                                <BridgeRow
+                                    label="= Cuan kas (estimasi laba dari arus kas)"
+                                    value={bridge.cuanKas}
+                                    strong
+                                />
+                                <BridgeRow
+                                    label="± Laba bersih pada tab Cuan/Boncos (basis serah terima) — selisih wajar karena akrual vs kas & penyusutan"
+                                    value={bridge.labaAkrual}
+                                    strong
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </>
+    );
+}
+
+function BridgeRow({
+    label,
+    value,
+    strong = false,
+    accent,
+}: {
+    label: string;
+    value: number;
+    strong?: boolean;
+    accent?: 'positive' | 'negative';
+}) {
+    return (
+        <div
+            className={cn(
+                'flex items-center justify-between px-4 py-2.5 sm:px-6 sm:py-3',
+                strong && 'bg-muted/40 font-semibold',
+            )}
+        >
+            <span
+                className={cn(
+                    'pr-3 text-muted-foreground',
+                    strong && 'text-foreground',
+                )}
+            >
+                {label}
+            </span>
+            <span
+                className={cn(
+                    'shrink-0 font-medium tabular-nums',
+                    accent === 'positive' && 'text-emerald-600 dark:text-emerald-400',
+                    accent === 'negative' && 'text-destructive',
+                )}
+            >
+                {value < 0 ? '−' : ''}
+                {formatRupiah(Math.abs(value))}
+            </span>
+        </div>
     );
 }
 

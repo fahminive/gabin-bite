@@ -184,6 +184,40 @@ class LaporanController extends Controller
 
         $saldoAkhir = $saldoAwal + $totalInflow - $totalOutflow;
 
+        // Jembatan "Saldo Kas → Cuan" (mengapa saldo kas ≠ laba):
+        //   laba kas ≈ saldo kas
+        //     − setoran modal usaha   (bukan hasil usaha)
+        //     − dana pribadi member   (money milik partner, bukan usaha)
+        //     − uang muka belum diserahkan (kas masuk, pendapatan belum diakui)
+        //     − nilai persediaan hari ini  (bahan & produk yang belum jadi omzet)
+        //     + pembelian peralatan tunai  (aset, bukan biaya)
+        $setoranModal = (float) ($formattedInflows['modal'] ?? 0);
+        $danaPribadiNet = (float) ($formattedInflows['cashPribadi'] ?? 0)
+            - (float) ($formattedOutflows['cashPribadi'] ?? 0);
+
+        $uangMukaBelumSerahkan = (float) Penjualan::query()
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->where('status_pembayaran', 'sudah_bayar')
+            ->whereNull('tanggal_diberikan')
+            ->where('status_penyerahan', 'belum_diberikan')
+            ->sum('total');
+
+        $persediaanBahan = (float) BahanBaku::sum(DB::raw('stok * harga_satuan'));
+        $persediaanProduk = (float) Produk::sum(DB::raw('stok * hpp'));
+        $peralatanDibeliTunai = (float) ($formattedOutflows['peralatan'] ?? 0);
+
+        $cuanKas = $saldoAkhir
+            - $setoranModal
+            - $danaPribadiNet
+            - $uangMukaBelumSerahkan
+            - $persediaanBahan
+            - $persediaanProduk
+            + $peralatanDibeliTunai;
+
+        // Laba akrual (dari tab Cuan/Boncos, basis serah terima) untuk
+        // pembanding langsung di tampilan.
+        $labaAkrual = $this->getIncomeStatementData($request)['labaBersih'];
+
         return [
             'startDate' => $startDate,
             'endDate' => $endDate,
@@ -195,6 +229,17 @@ class LaporanController extends Controller
             'totalInflow' => $totalInflow,
             'totalOutflow' => $totalOutflow,
             'saldoAkhir' => $saldoAkhir,
+            'bridge' => [
+                'saldoAkhir' => $saldoAkhir,
+                'setoranModal' => $setoranModal,
+                'danaPribadiNet' => $danaPribadiNet,
+                'uangMukaBelumSerahkan' => $uangMukaBelumSerahkan,
+                'persediaanBahan' => $persediaanBahan,
+                'persediaanProduk' => $persediaanProduk,
+                'peralatanDibeliTunai' => $peralatanDibeliTunai,
+                'cuanKas' => $cuanKas,
+                'labaAkrual' => $labaAkrual,
+            ],
         ];
     }
 
@@ -211,23 +256,51 @@ class LaporanController extends Controller
         return $pdf->download('Laporan_Arus_Kas_'.$data['startDate'].'_to_'.$data['endDate'].'.pdf');
     }
 
+    private function deliveredCondition(string $table = 'penjualans'): array
+    {
+        // Pendapatan diakui saat serah terima (akrual). Pesanan yang sudah
+        // dibayar tapi belum diserahkan dihitung sebagai uang muka, bukan
+        // pendapatan — sehingga Cuan/Boncos tidak "khayalan" untuk batch
+        // yang belum tuntas.
+        return [
+            "({$table}.tanggal_diberikan IS NOT NULL OR {$table}.status_penyerahan = 'sudah_diberikan')",
+            [],
+        ];
+    }
+
     private function getIncomeStatementData(Request $request)
     {
         [$startDate, $endDate] = $this->resolveDefaultDateRange($request);
         $preOrderId = $this->preOrderId($request);
 
-        // 1. Pendapatan Penjualan
+        // 1. Pendapatan Penjualan — hanya pesanan yang SUDAH DISERAHKAN.
+        //    Uang muka yang belum diserahkan masuk "Cashing uang muka" di
+        //    laporan arus kas, bukan ke sini (akrual kegiatan).
+        [$deliveredWhere, $deliveredBindings] = $this->deliveredCondition('penjualans');
+
         $pendapatan = (float) Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
             ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->whereRaw($deliveredWhere, $deliveredBindings)
             ->sum('total');
 
-        // 2. Harga Pokok Penjualan (HPP)
+        // 2. Harga Pokok Penjualan (HPP) — ikut basis serah terima agar
+        //    konsisten dengan pendapatan.
         $hpp = (float) DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
             ->whereBetween(DB::raw('DATE(penjualans.created_at)'), [$startDate, $endDate])
             ->when($preOrderId, fn ($q) => $q->where('penjualans.pre_order_id', $preOrderId))
+            ->whereRaw($deliveredWhere, $deliveredBindings)
             ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
+
+        // Uang muka: sudah dibayar (kas sudah masuk) tapi belum diserahkan —
+        // bukan pendapatan, hanya lompatan waktu kas vs laba.
+        $uangMukaBelumSerah = (float) Penjualan::whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
+            ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->where('status_pembayaran', 'sudah_bayar')
+            ->whereNull('tanggal_diberikan')
+            ->where('status_penyerahan', 'belum_diberikan')
+            ->sum('total');
 
         // 3. Laba Kotor
         $labaKotor = $pendapatan - $hpp;
@@ -289,6 +362,7 @@ class LaporanController extends Controller
             'labaBersihSebelumPajak' => $labaBersihSebelumPajak,
             'bebanPajak' => $bebanPajak,
             'labaBersih' => $labaBersihSetelahPajak,
+            'uangMukaBelumSerah' => $uangMukaBelumSerah,
             'profitSharing' => $profitSharing,
         ];
     }
@@ -353,14 +427,18 @@ class LaporanController extends Controller
         $modal = $modalKas + $peralatanAwal;
 
         // Laba Ditahan (Kumulatif Laba Bersih sejak awal s.d $date)
+        [$deliveredWhere, $deliveredBindings] = $this->deliveredCondition('penjualans');
+
         $pendapatanKumulatif = Penjualan::where(DB::raw('DATE(created_at)'), '<=', $date)
             ->when($preOrderId, fn ($q) => $q->where('pre_order_id', $preOrderId))
+            ->whereRaw($deliveredWhere, $deliveredBindings)
             ->sum('total');
         $hppKumulatif = DB::table('detail_penjualans')
             ->join('penjualans', 'detail_penjualans.penjualan_id', '=', 'penjualans.id')
             ->join('produks', 'detail_penjualans.produk_id', '=', 'produks.id')
             ->where(DB::raw('DATE(penjualans.created_at)'), '<=', $date)
             ->when($preOrderId, fn ($q) => $q->where('penjualans.pre_order_id', $preOrderId))
+            ->whereRaw($deliveredWhere, $deliveredBindings)
             ->sum(DB::raw('detail_penjualans.qty * produks.hpp'));
 
         $operasionalKasKumulatif = PengeluaranOperasional::where('tanggal', '<=', $date)

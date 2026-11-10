@@ -33,6 +33,7 @@ interface Props {
     labaBersihSebelumPajak: number;
     bebanPajak: number;
     labaBersih: number;
+    uangMukaBelumSerah?: number;
     profitSharing: {
         id: number;
         nama: string;
@@ -54,6 +55,7 @@ export default function IncomeStatement({
     labaBersihSebelumPajak,
     bebanPajak,
     labaBersih,
+    uangMukaBelumSerah = 0,
     profitSharing,
 }: Props) {
     const [filterStart, setFilterStart] = useState(startDate);
@@ -88,6 +90,34 @@ export default function IncomeStatement({
         <>
             <Head title="Laporan Laba Rugi" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6 print:p-0">
+                {/* Catatan dasar pencatatan */}
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200 sm:text-sm">
+                    <p className="font-semibold">
+                        Cuan/Boncos ≠ saldo kas — dan memang seharusnya beda.
+                    </p>
+                    <p className="mt-1 leading-relaxed">
+                        Pendapatan di sini diakui saat serah terima (bukan saat
+                        pesanan dibuat), HPP ikut dihitung saat itu, dan beban
+                        non-tunai (penyusutan) diikutkan.{' '}
+                        {uangMukaBelumSerah > 0 && (
+                            <>
+                                Ada{' '}
+                                <strong>
+                                    {formatRupiah(uangMukaBelumSerah)}
+                                </strong>{' '}
+                                uang muka pesanan yang belum diserahkan — uang
+                                itu ada di saldo kas tapi{' '}
+                                <em>belum</em> dihitung sebagai cuan.{' '}
+                            </>
+                        )}
+                        Lihat tab{' '}
+                        <strong>
+                            <u>Uang Masuk-Keluar</u>
+                        </strong>{' '}
+                        → “Jembatan: Saldo Kas → Cuan” untuk penjelasan
+                        selisihnya.
+                    </p>
+                </div>
                 {/* Header Section */}
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between print:hidden">
                     <div>
