@@ -12,7 +12,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import { ArrowLeftRight, Search } from "lucide-react"
+import { Search } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -32,6 +32,13 @@ interface DataTableProps<TData, TValue> {
   searchKey?: string
   searchPlaceholder?: string
 }
+
+/** "created_at" -> "Created At", untuk label kartu mobile. */
+function humanizeColumnLabel(id: string): string {
+  return id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+const ACTION_COLUMN_PATTERN = /^(aksi|actions?|tindakan)$/i
 
 export function DataTable<TData, TValue>({
   columns,
@@ -77,15 +84,81 @@ export function DataTable<TData, TValue>({
               className="pl-9 h-10 w-full rounded-xl bg-card text-sm"
             />
           </div>
-          {/* Mobile Swipe Hint */}
-          <div className="flex md:hidden items-center justify-end gap-1 text-[11px] font-medium text-muted-foreground px-1">
-            <ArrowLeftRight className="h-3 w-3 text-primary animate-pulse" />
-            <span>Geser horizontal untuk kolom lengkap</span>
-          </div>
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs">
+      {/* ============ MOBILE: stacked cards ============ */}
+      <div className="md:hidden flex flex-col gap-2.5">
+        {table.getRowModel().rows?.length ? (
+          table.getRowModel().rows.map((row) => {
+            const cells = row.getVisibleCells()
+            const actionCell =
+              cells.find((cell) =>
+                ACTION_COLUMN_PATTERN.test(cell.column.id),
+              ) ?? null
+            const infoCells = cells.filter((cell) => cell !== actionCell)
+            const firstCell = infoCells[0]
+            const restCells = infoCells.slice(1)
+
+            return (
+              <div
+                key={row.id}
+                className="rounded-2xl border border-border/70 bg-card p-3 shadow-xs active:bg-muted/20 transition-colors touch-manipulation"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    {firstCell && (
+                      <div className="text-sm font-bold truncate">
+                        {flexRender(
+                          firstCell.column.columnDef.cell,
+                          firstCell.getContext(),
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {actionCell && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {flexRender(
+                        actionCell.column.columnDef.cell,
+                        actionCell.getContext(),
+                      )}
+                    </div>
+                  )}
+                </div>
+                {restCells.length > 0 && (
+                  <dl className="mt-2 flex flex-col gap-1">
+                    {restCells.map((cell) => (
+                      <div
+                        key={cell.id}
+                        className="flex items-baseline justify-between gap-3 text-[13px]"
+                      >
+                        <dt className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                          {typeof cell.column.columnDef.header === 'string'
+                            ? cell.column.columnDef.header
+                            : humanizeColumnLabel(cell.column.id)}
+                        </dt>
+                        <dd className="min-w-0 text-right font-medium">
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            )
+          })
+        ) : (
+          <div className="rounded-2xl border border-border/70 bg-card p-8 text-center text-sm text-muted-foreground">
+            Belum ada data yang ditemukan.
+          </div>
+        )}
+      </div>
+
+      {/* ============ DESKTOP: table (tidak berubah) ============ */}
+      <div className="hidden md:block overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs">
         <div className="overflow-x-auto custom-scrollbar touch-scroll">
           <Table>
             <TableHeader>
@@ -150,7 +223,7 @@ export function DataTable<TData, TValue>({
               size="sm"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className="h-9 px-4 rounded-xl flex-1 sm:flex-initial"
+              className="h-10 px-4 rounded-xl flex-1 sm:flex-initial sm:h-9"
             >
               Sebelumnya
             </Button>
@@ -159,7 +232,7 @@ export function DataTable<TData, TValue>({
               size="sm"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="h-9 px-4 rounded-xl flex-1 sm:flex-initial"
+              className="h-10 px-4 rounded-xl flex-1 sm:flex-initial sm:h-9"
             >
               Selanjutnya
             </Button>

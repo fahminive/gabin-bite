@@ -55,7 +55,10 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
+          // Desktop: dialog tercenter (perilaku asli, tidak berubah)
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-1.5rem)] sm:max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-3xl border-2 p-5 sm:p-6 shadow-xl duration-200 max-h-[88vh] overflow-y-auto",
+          // Mobile (<sm): jadi bottom sheet dengan safe-area
+          "max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:w-full max-sm:max-w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:border-0 max-sm:border-t-2 max-sm:pt-6 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:max-h-[88svh] max-sm:touch-manipulation max-sm:data-[state=open]:zoom-in-100 max-sm:data-[state=closed]:zoom-out-100 max-sm:data-[state=open]:slide-in-from-bottom-4 max-sm:data-[state=closed]:slide-out-to-bottom-4",
           className
         )}
         {...props}
