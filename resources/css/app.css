@@ -247,6 +247,51 @@
     margin-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/*
+ * ============================================================
+ * MOBILE APP FEEL (< md/768px) - desktop tidak terpengaruh
+ * ============================================================
+ * Font lebih kecil, target sentuh >= 40px, tanpa double-tap zoom,
+ * tanpa rubber-band berlebihan. Semua aturan dibungkus @media
+ * (max-width: 767px).
+ */
+@media (max-width: 767px) {
+    html {
+        /* Font dasar 14px di mobile (desktop tetap default 16px) */
+        font-size: 14px;
+        text-size-adjust: none;
+        -webkit-text-size-adjust: none;
+    }
+
+    body {
+        /* App feel: tidak overscroll ke warna browser */
+        overscroll-behavior-y: none;
+        touch-action: manipulation;
+    }
+
+    /* Elemen interaktif: matikan double-tap zoom */
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    [role='button'] {
+        touch-action: manipulation;
+    }
+
+    /* Mode standalone (PWA ter-install): konten tidak menabrak notch */
+    html.standalone body {
+        padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    /* Input 16px fisik: mencegah iOS auto-zoom saat fokus */
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}
+
 * {
     -webkit-tap-highlight-color: transparent;
 }
