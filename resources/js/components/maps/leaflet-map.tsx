@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -25,6 +25,14 @@ export function LeafletMap({
     onMapClick,
     className = 'h-[420px] w-full',
 }: LeafletMapProps) {
+    // Simpan callback terbaru di ref supaya click listener peta selalu
+    // memanggil versi terbaru (mode titik manual/set dapur bisa berubah
+    // tanpa peta re-initialize).
+    const onMapClickRef = useRef(onMapClick);
+    useEffect(() => {
+        onMapClickRef.current = onMapClick;
+    }, [onMapClick]);
+
     useEffect(() => {
         const container = document.getElementById('gabin-route-map');
         if (!container) {
@@ -50,7 +58,7 @@ export function LeafletMap({
 
         if (onMapClick) {
             map.on('click', (e: L.LeafletMouseEvent) => {
-                onMapClick(e.latlng.lat, e.latlng.lng);
+                onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
             });
         }
 

@@ -166,13 +166,16 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         }
 
         if (modeTitikManual) {
-            const nama = prompt('Nama titik ini (mis. Ambil es batu):');
-            if (!nama) {
-                return;
-            }
+            // Nama diisi setelahnya via input inline (pendingTitikManual);
+            // langsung tampil pin supaya user bisa lanjut klik titik lain.
             setTitikManual((prev) => [
                 ...prev,
-                { id: `m:${Date.now()}`, nama, lat, lng },
+                {
+                    id: `m:${Date.now()}`,
+                    nama: `Titik ${prev.length + 1}`,
+                    lat,
+                    lng,
+                },
             ]);
             setModeTitikManual(false);
         }
@@ -556,22 +559,39 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                                 {titikManual.length > 0 && (
                                     <div className="mt-2 rounded-xl border border-border/70 bg-muted/30 p-2.5">
                                         <p className="mb-1.5 text-[10px] font-bold text-muted-foreground">
-                                            Titik manual ({titikManual.length})
+                                            Titik manual ({titikManual.length}) - edit nama lalu keluar input
                                         </p>
-                                        <div className="flex flex-wrap gap-1.5">
+                                        <div className="flex flex-col gap-1.5">
                                             {titikManual.map((m) => (
-                                                <button
-                                                    key={m.id}
-                                                    type="button"
-                                                    className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-1 text-[10px] font-semibold shadow-xs"
-                                                    onClick={() =>
-                                                        setTitikManual((prev) => prev.filter((x) => x.id !== m.id))
-                                                    }
-                                                    title="Klik untuk hapus"
-                                                >
-                                                    <MapPinned className="h-3 w-3 text-primary" />
-                                                    {m.nama}
-                                                </button>
+                                                <div key={m.id} className="flex items-center gap-1.5">
+                                                    <MapPinned className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                                    <Input
+                                                        value={m.nama}
+                                                        onChange={(e) =>
+                                                            setTitikManual((prev) =>
+                                                                prev.map((x) =>
+                                                                    x.id === m.id
+                                                                        ? { ...x, nama: e.target.value }
+                                                                        : x,
+                                                                ),
+                                                            )
+                                                        }
+                                                        className="h-8 rounded-lg text-xs"
+                                                        aria-label="Nama titik manual"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setTitikManual((prev) =>
+                                                                prev.filter((x) => x.id !== m.id),
+                                                            )
+                                                        }
+                                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-destructive transition-colors active:bg-destructive/10"
+                                                        aria-label={`Hapus ${m.nama}`}
+                                                    >
+                                                        &times;
+                                                    </button>
+                                                </div>
                                             ))}
                                         </div>
                                     </div>
