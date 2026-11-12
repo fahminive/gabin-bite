@@ -387,7 +387,96 @@ export default function SplitBillIndex({
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
-                        <div className="overflow-x-auto">
+                        {/* Mobile: kartu per partner */}
+                        <div className="flex flex-col gap-2.5 md:hidden">
+                            {balances.map((balance) => {
+                                const danaPribadi =
+                                    Number(balance.dana_pribadi_masuk) -
+                                    Number(balance.dana_pribadi_keluar);
+                                const transfer =
+                                    Number(balance.transfer_masuk) -
+                                    Number(balance.transfer_keluar);
+
+                                return (
+                                    <div
+                                        key={balance.id}
+                                        className="rounded-2xl border border-border/70 bg-card p-3 shadow-xs"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-sm font-bold">
+                                                {balance.nama}
+                                                <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+                                                    {balance.kode}
+                                                </span>
+                                            </span>
+                                            <Badge
+                                                variant={
+                                                    balance.saldo === 0
+                                                        ? 'secondary'
+                                                        : balance.saldo > 0
+                                                            ? 'outline'
+                                                            : 'destructive'
+                                                }
+                                                className="shrink-0 text-xs font-bold"
+                                            >
+                                                {formatRupiah(Number(balance.saldo))}
+                                            </Badge>
+                                        </div>
+                                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[13px]">
+                                            <div className="flex justify-between gap-2">
+                                                <dt className="text-muted-foreground">Ditalangi</dt>
+                                                <dd className="font-medium">{formatRupiah(Number(balance.dibayar))}</dd>
+                                            </div>
+                                            <div className="flex justify-between gap-2">
+                                                <dt className="text-muted-foreground">Patungan</dt>
+                                                <dd className="font-medium text-red-600 dark:text-red-400">{formatRupiah(Number(balance.bagian))}</dd>
+                                            </div>
+                                            <div className="flex justify-between gap-2">
+                                                <dt className="text-muted-foreground">Dana Pribadi</dt>
+                                                <dd className="font-medium">
+                                                    {danaPribadi !== 0 ? signedRupiah(danaPribadi) : '0'}
+                                                </dd>
+                                            </div>
+                                            <div className="flex justify-between gap-2">
+                                                <dt className="text-muted-foreground">Penyesuaian</dt>
+                                                <dd className="font-medium">
+                                                    {Number(balance.penyesuaian) !== 0 ? signedRupiah(Number(balance.penyesuaian)) : '0'}
+                                                </dd>
+                                            </div>
+                                            <div className="flex justify-between gap-2">
+                                                <dt className="text-muted-foreground">Transfer</dt>
+                                                <dd className="font-medium">
+                                                    {transfer !== 0 ? signedRupiah(transfer) : '0'}
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                        {balance.saldo !== 0 && (
+                                            <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                                {balance.saldo > 0 ? 'patungan utang ke dia' : 'dia utang patungan'}
+                                            </p>
+                                        )}
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="mt-2.5 h-9 w-full rounded-xl text-xs"
+                                            onClick={() => {
+                                                resetAdjustmentForm();
+                                                adjForm.setData('mitra_id', String(balance.id));
+                                                document
+                                                    .getElementById('penyesuaian')
+                                                    ?.scrollIntoView({ behavior: 'smooth' });
+                                            }}
+                                        >
+                                            <Plus className="mr-1 h-3.5 w-3.5" />
+                                            Penyesuaian
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Desktop: tabel lengkap */}
+                        <div className="hidden md:block overflow-x-auto">
                             <table className="w-full min-w-[760px] text-sm">
                                 <thead>
                                     <tr className="border-b text-left text-xs text-muted-foreground">
@@ -608,7 +697,80 @@ export default function SplitBillIndex({
                 </Card>
                 <Card className="rounded-2xl border border-border/80 shadow-xs">
                     <CardContent className="p-0">
-                        <div className="overflow-x-auto">
+                        {/* Mobile: daftar kartu penyesuaian */}
+                        <div className="flex flex-col gap-2 p-3 md:hidden">
+                            {adjustments.length === 0 && (
+                                <p className="py-6 text-center text-sm text-muted-foreground">
+                                    Belum ada penyesuaian manual.
+                                </p>
+                            )}
+                            {adjustments.map((adjustment) => (
+                                <div
+                                    key={adjustment.id}
+                                    className="rounded-xl border border-border/70 bg-card p-3 shadow-xs"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-bold">
+                                            {adjustment.mitra?.nama ?? mitraName(adjustment.mitra_id)}
+                                        </span>
+                                        <span
+                                            className={`text-sm font-bold ${Number(adjustment.nominal) > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+                                        >
+                                            {signedRupiah(Number(adjustment.nominal))}
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        {adjustment.tanggal?.slice(0, 10)}
+                                        {adjustment.pre_order ? ` - ${adjustment.pre_order.kode}` : ''}
+                                        {adjustment.keterangan ? ` - ${adjustment.keterangan}` : ''}
+                                    </p>
+                                    <div className="mt-2 flex items-center justify-end gap-1">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-8 w-8 p-0"
+                                            onClick={() => startEditAdjustment(adjustment)}
+                                            aria-label="Edit penyesuaian"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-8 w-8 p-0"
+                                                    aria-label="Hapus penyesuaian"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>
+                                                        Hapus penyesuaian ini?
+                                                    </AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        {signedRupiah(Number(adjustment.nominal))} untuk
+                                                        {' '}{adjustment.mitra?.nama ?? mitraName(adjustment.mitra_id)}
+                                                        {' '}akan dihapus dan saldo partner dihitung ulang.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => deleteAdjustment(adjustment)}>
+                                                        Hapus
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop: tabel */}
+                        <div className="hidden overflow-x-auto md:block">
                             <table className="w-full min-w-[560px] text-sm">
                                 <thead>
                                     <tr className="border-b text-left text-xs text-muted-foreground">
@@ -689,8 +851,7 @@ export default function SplitBillIndex({
                     </CardContent>
                 </Card>
 
-                {/* Matriks tunggakan */}
-                <Card className="rounded-2xl border border-border/80 shadow-xs">
+                {/* Matriks tunggakan */}                <Card className="rounded-2xl border border-border/80 shadow-xs">
                     <CardHeader className="pb-2 p-4">
                         <CardTitle className="flex items-center gap-2 text-base font-bold">
                             <Calendar className="h-4 w-4 text-primary" />
@@ -877,7 +1038,80 @@ export default function SplitBillIndex({
                                 )}
                             </div>
                         </form>
-                        <div className="overflow-x-auto">
+                        {/* Mobile: daftar kartu transfer */}
+                        <div className="mt-3 flex flex-col gap-2 md:hidden">
+                            {transfers.length === 0 && (
+                                <p className="py-4 text-center text-sm text-muted-foreground">
+                                    Belum ada transfer antar partner.
+                                </p>
+                            )}
+                            {transfers.map((transfer) => (
+                                <div
+                                    key={transfer.id}
+                                    className="rounded-xl border border-border/70 bg-card p-3 shadow-xs"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-bold">
+                                            {transfer.dari_mitra?.nama ?? transfer.dari_mitra_id}
+                                            <span className="mx-1 text-muted-foreground">{'>'}</span>
+                                            {transfer.ke_mitra?.nama ?? transfer.ke_mitra_id}
+                                        </span>
+                                        <span className="shrink-0 text-sm font-bold">
+                                            {formatRupiah(Number(transfer.nominal))}
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        {transfer.tanggal?.slice(0, 10)}
+                                        {transfer.pre_order ? ` - ${transfer.pre_order.kode}` : ''}
+                                        {transfer.keterangan ? ` - ${transfer.keterangan}` : ''}
+                                    </p>
+                                    <div className="mt-2 flex items-center justify-end gap-1">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-8 w-8 p-0"
+                                            onClick={() => startEditTransfer(transfer)}
+                                            aria-label="Edit transfer"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-8 w-8 p-0"
+                                                    aria-label="Hapus transfer"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>
+                                                        Hapus transfer ini?
+                                                    </AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Transfer {formatRupiah(Number(transfer.nominal))} dari
+                                                        {' '}{transfer.dari_mitra?.nama} ke
+                                                        {' '}{transfer.ke_mitra?.nama} akan dihapus.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => deleteTransfer(transfer)}>
+                                                        Hapus
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop: tabel */}
+                        <div className="hidden overflow-x-auto md:block">
                             <table className="w-full min-w-[560px] text-sm">
                                 <thead>
                                     <tr className="border-b text-left text-xs text-muted-foreground">
