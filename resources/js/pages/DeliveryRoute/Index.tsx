@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import {
     MapPin,
@@ -11,6 +11,7 @@ import {
     Search,
     MapPinned,
     Plus,
+    LocateFixed,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,13 +20,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { LeafletMap } from '@/components/maps/leaflet-map';
 import {
-    geocodeAlamat,
+    titikDariAlamat,
+    optimasiLokal,
     osrmTripOneWay,
     osrmTripRoundTrip,
     osrmRouteFixed,
     formatJarak,
     formatDurasi,
     gmapsPerTitik,
+    gpsSekarang,
+    gpsWatch,
+    isGmapsLink,
+    type GpsWatcher,
     type LatLng,
 } from '@/lib/route-utils';
 
@@ -81,6 +87,55 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
     const [menghitung, setMenghitung] = useState(false);
     const [selesaiSampai, setSelesaiSampai] = useState<Set<string>>(new Set());
     const [loadingStops, setLoadingStops] = useState(false);
+    const [gpsAktif, setGpsAktif] = useState(false);
+    const [posisiSaya, setPosisiSaya] = useState<{
+        lat: number;
+        lng: number;
+        akurasi?: number;
+    } | null>(null);
+    const [sedangSetDapurGps, setSedangSetDapurGps] = useState(false);
+    const watcherRef = useRef<GpsWatcher | null>(null);
+
+    // Matikan GPS watch saat halaman ditutup
+    useEffect(() => {
+        return () => {
+            watcherRef.current?.stop();
+        };
+    }, []);
+
+    function toggleGps() {
+        if (gpsAktif) {
+            watcherRef.current?.stop();
+            watcherRef.current = null;
+            setGpsAktif(false);
+            setPosisiSaya(null);
+            return;
+        }
+
+        const watcher = gpsWatch((titik, akurasi) => {
+            setPosisiSaya({ ...titik, akurasi });
+        });
+        if (watcher) {
+            watcherRef.current = watcher;
+            setGpsAktif(true);
+        } else {
+            alert('GPS tidak tersedia di perangkat/browser ini.');
+        }
+    }
+
+    /** Set dapur dari posisi GPS saat ini. */
+    async function setDapurDariGps() {
+        setSedangSetDapurGps(true);
+        const titik = await gpsSekarang();
+        setSedangSetDapurGps(false);
+        if (!titik) {
+            alert(
+                'Gagal mengambil GPS. Izinkan akses lokasi di browser, atau klik peta manual.',
+            );
+            return;
+        }
+        await simpanDapur(titik.lat, titik.lng);
+    }
 
     // Muat stop tiap ganti batch
     useEffect(() => {
@@ -108,19 +163,20 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
             .finally(() => setLoadingStops(false));
     }, [batchId]);
 
-    /** Estimasi titik dari alamat teks via Nominatim lalu simpan ke backend. */
+    /** Estimasi titik dari alamat/link gmaps lalu simpan ke backend. */
     async function estimasiTitik(stop: Stop) {
         if (!stop.alamat) {
             return;
         }
         setGeocodeTarget(stop.id);
-        const titik = await geocodeAlamat(stop.alamat);
+        const titik = await titikDariAlamat(stop.alamat);
         setGeocodeTarget(null);
 
         if (!titik) {
-            alert(
-                `Titik tidak ditemukan untuk "${stop.nama}". Geser pin manual: aktifkan "Pin titik manual" lalu klik peta dekat lokasinya.`,
-            );
+            const petunjuk = isGmapsLink(stop.alamat)
+                ? 'Link Google Maps ini tidak berisi koordinat yang bisa dibaca (link "tempat/place" tanpa pin). Solusi: di gmaps, tap lama pada pin lokasinya lalu "Bagikan" memakai link yang berisi koordinat, ATAU pin manual di peta (tombol "Pin Titik Manual").'
+                : 'Alamat teks tidak ditemukan di peta. Solusi: pin manual di peta (tombol "Pin Titik Manual") atau isi alamat lebih spesifik (nama jalan + kota).';
+            alert(`Titik tidak ditemukan untuk "${stop.nama}".\n\n${petunjuk}`);
             return;
         }
 
@@ -138,14 +194,14 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
             }),
         });
 
-        setStops((prev) =>
-            prev.map((s) =>
+        setStops(prev =>
+            prev.map(s =>
                 s.id === stop.id
                     ? { ...s, latitude: titik.lat, longitude: titik.lng, punya_titik: true }
                     : s,
             ),
         );
-        setTerpilih((prev) => new Set(prev).add(stop.id));
+        setTerpilih(prev => new Set(prev).add(stop.id));
     }
 
     /** Estimasi semua stop yang belum punya titik (berurutan, hormati 1 req/detik). */
@@ -232,43 +288,79 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                 ...dipilih.map((d) => d.titik),
             ];
 
-            let rute = pulangKeDapur
+            // Urutan visit dari OSRM trip; kalau OSRM down, optimasi lokal
+            // (nearest neighbor + 2-opt) - fitur tetap jalan walau OSRM down.
+            let urutanInput: number[] = [];
+            let geometri: Array<[number, number]> = [];
+            let jarak = 0;
+            let durasi = 0;
+
+            const rute = pulangKeDapur
                 ? await osrmTripRoundTrip(koordinat)
                 : await osrmTripOneWay(koordinat);
 
-            if (!rute) {
-                // Fallback: urutan input saja (dapur -> 1..n -> dapur)
-                const fixed = pulangKeDapur ? [...koordinat, koordinat[0]] : koordinat;
-                const r = await osrmRouteFixed(fixed);
+            if (rute) {
+                urutanInput = rute.urutanInputKunjungan;
+                geometri = rute.geometri;
+                jarak = rute.jarak;
+                durasi = rute.durasi;
+            } else {
+                // OSRM trip gagal: coba rute tetap-urutan dgn urutan hasil
+                // optimasi lokal (tetap efisien, geometri tetap jalan aspal)
+                urutanInput = optimasiLokal(
+                    { lat: dapur.latitude, lng: dapur.longitude },
+                    dipilih.map((d) => d.titik),
+                    pulangKeDapur,
+                );
+                const urutanKoordinat = [
+                    koordinat[0],
+                    ...urutanInput.map((i) => dipilih[i].titik),
+                    ...(pulangKeDapur ? [koordinat[0]] : []),
+                ];
+                const r = await osrmRouteFixed(urutanKoordinat);
                 if (r) {
-                    rute = {
-                        urutan: dipilih.map((_, i) => i + 1),
-                        geometri: r.geometri,
-                        jarak: r.jarak,
-                        durasi: r.durasi,
-                    };
+                    geometri = r.geometri;
+                    jarak = r.jarak;
+                    durasi = r.durasi;
                 }
             }
 
-            if (!rute) {
-                alert('Gagal menghitung rute (jaringan/OSRM down). Coba lagi.');
-                return;
+            if (!geometri.length) {
+                // OSRM benar-benar down: tetap tampil urutan + jarak
+                // garis-lurus (estimasi), fitur tetap bisa dipakai.
+                let cur: LatLng = { lat: dapur.latitude, lng: dapur.longitude };
+                const semua = [cur, ...urutanInput.map((i) => dipilih[i].titik)];
+                if (pulangKeDapur) {
+                    semua.push(cur);
+                }
+                jarak = 0;
+                for (let i = 0; i < semua.length - 1; i++) {
+                    jarak += haversine(semua[i], semua[i + 1]);
+                }
+                durasi = Math.round(((jarak / 1000) / 25) * 3600); // asumsi 25 km/jam
             }
 
-            // OSRM waypoint order: urutan kunjungan = index input (dipakai
-            // untuk menyusun label 1,2,3..). Waypoint pertama selalu dapur.
-            const urutanKunjungan = hitungUrutanKunjungan(dipilih, pulangKeDapur);
+            // Map urutan input index -> stop key
+            const urutanKunjungan = urutanInput.map((i) => dipilih[i].key);
 
-            setHasil({
-                urutanKunjungan,
-                geometri: rute.geometri,
-                jarak: rute.jarak,
-                durasi: rute.durasi,
-            });
+            setHasil({ urutanKunjungan, geometri, jarak, durasi });
             setSelesaiSampai(new Set());
         } finally {
             setMenghitung(false);
         }
+    }
+
+    /** Jarak dua titik garis lurus (meter). */
+    function haversine(a: LatLng, b: LatLng): number {
+        const R = 6371000;
+        const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+        const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+        const sLat =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos((a.lat * Math.PI) / 180) *
+                Math.cos((b.lat * Math.PI) / 180) *
+                Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(sLat));
     }
 
     return (
@@ -305,10 +397,33 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                             variant="outline"
                             size="sm"
                             className="h-9 rounded-xl text-xs"
+                            disabled={sedangSetDapurGps}
+                            onClick={setDapurDariGps}
+                        >
+                            {sedangSetDapurGps ? (
+                                <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <LocateFixed className="mr-1 h-3.5 w-3.5" />
+                            )}
+                            Dapur dari GPS
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 rounded-xl text-xs"
                             onClick={() => setModeTitikManual(true)}
                         >
                             <Plus className="mr-1 h-3.5 w-3.5" />
                             Pin Titik Manual
+                        </Button>
+                        <Button
+                            variant={gpsAktif ? 'default' : 'outline'}
+                            size="sm"
+                            className="h-9 rounded-xl text-xs"
+                            onClick={toggleGps}
+                        >
+                            <LocateFixed className="mr-1 h-3.5 w-3.5" />
+                            {gpsAktif ? 'GPS Aktif' : 'GPS Saya'}
                         </Button>
                         <Button
                             size="sm"
@@ -362,6 +477,7 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                                 ]}
                                 dapur={dapur ? { lat: dapur.latitude, lng: dapur.longitude } : null}
                                 polyline={hasil?.geometri}
+                                titikSaya={posisiSaya}
                                 onMapClick={onMapClick}
                                 className="h-[380px] w-full rounded-xl md:h-[520px]"
                             />
@@ -606,41 +722,6 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
 }
 
 /**
- * Urutan kunjungan final utk label nomor: OSRM trip mengoptimasi urutan
- * kunjungan; fungsi ini menyusun key stop sesuai hasil trip. Karena OSRM
- * /trip tidak mengembalikan mapping langsung ke index input pada public
- * server (waypoint order implisit), kita pakai nearest-neighbor dari
- * geometri sebagai penentu urutan tampil - cukup akurat utk perkiraan
- * kunjungan dan konsisten dgn garis rute.
+ * Urutan kunjungan dihitung dari hasil OSRM trip (urutanInputKunjungan)
+ * atau fallback optimasiLokal; tidak perlu fungsi terpisah lagi.
  */
-function hitungUrutanKunjungan(
-    dipilih: Array<{ key: string; titik: LatLng; label: string }>,
-    pulang: boolean,
-): string[] {
-    // Nearest neighbor sederhana dari titik pertama (dapur sudah dikeluarkan
-    // dari `dipilih`). Cukup utk labeling; garis rute tetap dari OSRM.
-    const sisa = [...dipilih];
-    const urutan: string[] = [];
-    let pos: LatLng = sisa.length ? sisa[0].titik : { lat: 0, lng: 0 };
-
-    // Mulai dari yang terdekat ke titik pertama input (biasanya dapur-terdekat)
-    const jarak = (a: LatLng, b: LatLng) => Math.hypot(a.lat - b.lat, a.lng - b.lng);
-
-    let current: LatLng = sisa.length ? sisa[0].titik : pos;
-    while (sisa.length) {
-        let bestIdx = 0;
-        let bestDist = Infinity;
-        sisa.forEach((s, i) => {
-            const d = jarak(current, s.titik);
-            if (d < bestDist) {
-                bestDist = d;
-                bestIdx = i;
-            }
-        });
-        const next = sisa.splice(bestIdx, 1)[0];
-        urutan.push(next.key);
-        current = next.titik;
-    }
-
-    return urutan;
-}

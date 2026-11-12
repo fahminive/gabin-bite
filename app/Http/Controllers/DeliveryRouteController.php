@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PreOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -86,6 +87,75 @@ class DeliveryRouteController extends Controller
         DB::table('penjualans')->where('id', $validated['id'])->update($update);
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Resolve link Google Maps (termasuk short link maps.app.goo.gl) menjadi
+     * koordinat. Dilakukan SERVER-SIDE karena browser dibatasi CORS ketika
+     * fetch langsung ke google.com.
+     */
+    public function resolveGmaps(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'url' => 'required|url|max:2048',
+        ]);
+
+        $url = $validated['url'];
+
+        // 1. Koordinat langsung di URL asli (@lat,lng / q= / !3d!4d)
+        $titik = $this->ekstrakKoordinat($url);
+        if ($titik) {
+            return response()->json(['titik' => $titik]);
+        }
+
+        // 2. Ikuti redirect (short link) - maksimal 5 hop, timeout 10s
+        try {
+            $res = Http::timeout(10)
+                ->withOptions(['allow_redirects' => ['max' => 5]])
+                ->get($url);
+            $finalUrl = (string) $res->effectiveUri();
+        } catch (\Throwable) {
+            return response()->json(['titik' => null], 200);
+        }
+
+        $titik = $this->ekstrakKoordinat($finalUrl);
+        if ($titik) {
+            return response()->json(['titik' => $titik]);
+        }
+
+        // 3. URL final tak berkoordinat (place link): cari koordinat di body
+        $body = $res->body();
+        if (preg_match('/(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/', $body, $m)) {
+            $lat = (float) $m[1];
+            $lng = (float) $m[2];
+            if (abs($lat) <= 90 && abs($lng) <= 180 && ($lat != 0 || $lng != 0)) {
+                return response()->json(['titik' => ['lat' => $lat, 'lng' => $lng]]);
+            }
+        }
+
+        return response()->json(['titik' => null]);
+    }
+
+    private function ekstrakKoordinat(string $teks): ?array
+    {
+        $pola = [
+            '/@(-?\d+\.\d+),(-?\d+\.\d+)/',
+            '/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/',
+            '/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/',
+            '/[?&]destination=(-?\d+\.\d+),(-?\d+\.\d+)/',
+            '/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/',
+        ];
+        foreach ($pola as $p) {
+            if (preg_match($p, $teks, $m)) {
+                $lat = (float) $m[1];
+                $lng = (float) $m[2];
+                if (abs($lat) <= 90 && abs($lng) <= 180 && ($lat != 0 || $lng != 0)) {
+                    return ['lat' => $lat, 'lng' => $lng];
+                }
+            }
+        }
+
+        return null;
     }
 
     /** Titik awal & akhir rute: lokasi dapur dari settings. */

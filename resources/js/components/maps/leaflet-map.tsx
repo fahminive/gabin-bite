@@ -9,6 +9,8 @@ interface LeafletMapProps {
     dapur?: { lat: number; lng: number; nama?: string } | null;
     /** [lat, lng][] urutan rute hasil optimasi - digambar polyline */
     polyline?: Array<[number, number]>;
+    /** Posisi GPS kurir saat ini (titik biru + lingkaran akurasi) */
+    titikSaya?: { lat: number; lng: number; akurasi?: number } | null;
     /** Klik peta (untuk pin titik manual / set dapur) */
     onMapClick?: (lat: number, lng: number) => void;
     className?: string;
@@ -30,6 +32,14 @@ const ikonNomor = (nomor: number) =>
         iconAnchor: [14, 14],
     });
 
+const ikonSaya = () =>
+    L.divIcon({
+        html: '<div style="display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:#1d4ed8;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.45)"></div>',
+        className: '',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+    });
+
 /**
  * Peta Leaflet (OpenStreetMap) tanpa API key.
  *
@@ -42,6 +52,7 @@ export function LeafletMap({
     markers,
     dapur,
     polyline,
+    titikSaya,
     onMapClick,
     className = 'h-[420px] w-full',
 }: LeafletMapProps) {
@@ -49,6 +60,9 @@ export function LeafletMap({
     const mapRef = useRef<L.Map | null>(null);
     const layerGroupRef = useRef<L.LayerGroup | null>(null);
     const polylineLayerRef = useRef<L.Polyline | null>(null);
+    const sayaMarkerRef = useRef<L.Marker | null>(null);
+    const sayaAkurasiRef = useRef<L.Circle | null>(null);
+    const sayaCenteredRef = useRef(false);
     const fittedRef = useRef(false);
 
     // Callback terbaru di ref: click listener tetap memanggil versi terbaru
@@ -82,9 +96,62 @@ export function LeafletMap({
             mapRef.current = null;
             layerGroupRef.current = null;
             polylineLayerRef.current = null;
+            sayaMarkerRef.current = null;
+            sayaAkurasiRef.current = null;
             fittedRef.current = false;
         };
     }, []);
+
+    // ===== Update marker GPS kurir (realtime, TIDAK mengganggu view) =====
+    const sayaKey = titikSaya ? `${titikSaya.lat},${titikSaya.lng}` : '';
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) {
+            return;
+        }
+
+        if (!titikSaya) {
+            sayaMarkerRef.current?.remove();
+            sayaAkurasiRef.current?.remove();
+            sayaMarkerRef.current = null;
+            sayaAkurasiRef.current = null;
+            sayaCenteredRef.current = false;
+            return;
+        }
+
+        if (!sayaMarkerRef.current) {
+            sayaMarkerRef.current = L.marker([titikSaya.lat, titikSaya.lng], {
+                icon: ikonSaya(),
+                zIndexOffset: 1000,
+                interactive: false,
+            }).addTo(map);
+        } else {
+            sayaMarkerRef.current.setLatLng([titikSaya.lat, titikSaya.lng]);
+        }
+
+        if (titikSaya.akurasi && titikSaya.akurasi > 0) {
+            if (!sayaAkurasiRef.current) {
+                sayaAkurasiRef.current = L.circle([titikSaya.lat, titikSaya.lng], {
+                    radius: titikSaya.akurasi,
+                    color: '#1d4ed8',
+                    weight: 1,
+                    fillColor: '#1d4ed8',
+                    fillOpacity: 0.08,
+                    interactive: false,
+                }).addTo(map);
+            } else {
+                sayaAkurasiRef.current.setLatLng([titikSaya.lat, titikSaya.lng]);
+                sayaAkurasiRef.current.setRadius(titikSaya.akurasi);
+            }
+        }
+
+        // Center sekali di awal supaya user melihat dirinya, lalu TIDAK
+        // dipaksa lagi (user bebas geser-zoom utk cek rute).
+        if (!sayaCenteredRef.current) {
+            map.setView([titikSaya.lat, titikSaya.lng], 16);
+            sayaCenteredRef.current = true;
+        }
+    }, [sayaKey]);
 
     // ===== Update markers + polyline + fit bounds =====
     const markersKey = JSON.stringify(markers);
