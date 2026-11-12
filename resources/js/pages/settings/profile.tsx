@@ -1,5 +1,6 @@
 import { Form, Head, usePage } from '@inertiajs/react';
-import { Link } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
+import { LogOut } from 'lucide-react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/delete-user';
 import Heading from '@/components/heading';
@@ -8,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/profile';
+import { logout } from '@/routes';
 import { send } from '@/routes/verification';
 import type { Auth } from '@/types';
 
@@ -121,6 +123,23 @@ export default function Profile({
                         </>
                     )}
                 </Form>
+            </div>
+
+            {/* Logout - tampil sebagai tombol besar di mobile (profil tidak
+                lagi di menu kanan-atas) */}
+            <div className="md:hidden">
+                <Button
+                    variant="outline"
+                    className="h-12 w-full rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive active:scale-[0.99] touch-manipulation"
+                    onClick={() => {
+                        router.flushAll();
+                        router.post(logout());
+                    }}
+                    data-test="logout-button-mobile"
+                >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Keluar dari GabinBite
+                </Button>
             </div>
 
             <DeleteUser />
