@@ -58,7 +58,7 @@ class PembelianController extends Controller
             'items' => 'required|array|min:1',
             'items.*.bahan_baku_id' => 'required|exists:bahan_bakus,id',
             'items.*.qty_masuk_stok' => 'required|numeric|min:1',
-            'items.*.harga_satuan' => 'required|integer|min:0',
+            'items.*.harga_satuan' => 'required|numeric|min:0',
         ]);
 
         if (! empty($validated['pre_order_id'])) {
@@ -68,7 +68,7 @@ class PembelianController extends Controller
             }
         }
 
-        $totalPembelian = collect($validated['items'])->sum(fn ($item) => (int) $item['qty_masuk_stok'] * $item['harga_satuan']);
+        $totalPembelian = collect($validated['items'])->sum(fn ($item) => (float) $item['qty_masuk_stok'] * (float) $item['harga_satuan']);
 
         DB::transaction(function () use ($validated, $totalPembelian, $splitBill) {
             $pembelian = Pembelian::create([
@@ -84,7 +84,7 @@ class PembelianController extends Controller
             foreach ($validated['items'] as $item) {
                 $bahanBaku = BahanBaku::findOrFail($item['bahan_baku_id']);
 
-                $qtyMasukStok = (int) $item['qty_masuk_stok'];
+                $qtyMasukStok = (float) $item['qty_masuk_stok'];
 
                 $pembelian->detailPembelians()->create([
                     'bahan_baku_id' => $item['bahan_baku_id'],

@@ -653,7 +653,7 @@ export default function PurchasesCreate({
                                                         <Input
                                                             type="number"
                                                             min="0"
-                                                            step="1"
+                                                            step="any"
                                                             placeholder="0"
                                                             value={
                                                                 item.harga_satuan
@@ -668,8 +668,8 @@ export default function PurchasesCreate({
                                                             }
                                                         />
                                                         <p className="text-[10px] leading-none text-muted-foreground">
-                                                            Boleh bilangan bulat
-                                                            saja (tanpa koma)
+                                                            Boleh desimal
+                                                            (mis. 12500.5)
                                                         </p>
                                                     </td>
                                                     <td className="py-2 pr-2 text-right font-medium">
