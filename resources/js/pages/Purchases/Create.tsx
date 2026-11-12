@@ -67,6 +67,10 @@ interface Item {
     qty_bungkus: string;
     beli_per_bungkus: boolean;
     harga_satuan: string;
+    /** Mode input harga: per satuan atau total untuk semua qty. */
+    harga_mode: 'satuan' | 'total';
+    /** Nilai harga total (dipakai saat harga_mode = 'total'). */
+    harga_total: string;
     netto_pcs: number | null;
     qty_masuk_stok?: number;
 }
@@ -85,6 +89,8 @@ export default function PurchasesCreate({
             qty_bungkus: '',
             beli_per_bungkus: false,
             harga_satuan: '',
+            harga_mode: 'satuan',
+            harga_total: '',
             netto_pcs: null,
         },
     ]);
@@ -108,6 +114,8 @@ export default function PurchasesCreate({
                 qty_bungkus: '',
                 beli_per_bungkus: false,
                 harga_satuan: '',
+                harga_mode: 'satuan',
+                harga_total: '',
                 netto_pcs: null,
             },
         ]);
@@ -160,6 +168,50 @@ export default function PurchasesCreate({
         });
     }
 
+    /**
+     * Ganti mode input harga satuan <-> total. Nilai yang sudah diketik
+     * dikonversi agar tidak "hilang": satuan x qty = total, total / qty
+     * = satuan.
+     */
+    function toggleHargaMode(index: number) {
+        setItems((prev) => {
+            const updated = [...prev];
+            const item = updated[index];
+            const qty = effectiveQty(item);
+
+            if (item.harga_mode === 'satuan') {
+                updated[index] = {
+                    ...item,
+                    harga_mode: 'total',
+                    harga_total:
+                        qty > 0
+                            ? String(
+                                  Math.round(
+                                      Number(item.harga_satuan || 0) * qty,
+                                  ),
+                              )
+                            : item.harga_total,
+                };
+            } else {
+                updated[index] = {
+                    ...item,
+                    harga_mode: 'satuan',
+                    harga_satuan:
+                        qty > 0
+                            ? String(
+                                  Math.round(
+                                      (Number(item.harga_total || 0) / qty) *
+                                          100,
+                                  ) / 100,
+                              )
+                            : item.harga_satuan,
+                };
+            }
+
+            return updated;
+        });
+    }
+
     function effectiveQty(item: Item): number {
         if (item.beli_per_bungkus) {
             return Math.max(
@@ -171,7 +223,28 @@ export default function PurchasesCreate({
         return Math.max(Number(item.qty), 0);
     }
 
+    /**
+     * Harga satuan efektif: saat mode 'total', harga yang diketik user
+     * adalah untuk SELURUH qty masuk stok, dibagi rata per satuan.
+     * Contoh: 12 pcs susu Rp66.000 total -> satuan 5.500.
+     */
+    function effectiveHargaSatuan(item: Item): number {
+        const qty = effectiveQty(item);
+        if (item.harga_mode === 'total') {
+            if (qty <= 0) {
+                return 0;
+            }
+            return Number(item.harga_total || 0) / qty;
+        }
+
+        return Number(item.harga_satuan || 0);
+    }
+
     function calculateSubtotal(item: Item): number {
+        if (item.harga_mode === 'total') {
+            return Math.max(Number(item.harga_total || 0), 0);
+        }
+
         return effectiveQty(item) * Number(item.harga_satuan || 0);
     }
 
@@ -187,6 +260,9 @@ export default function PurchasesCreate({
             items: items.map((item) => ({
                 ...item,
                 qty_masuk_stok: effectiveQty(item),
+                // Backend selalu menerima harga satuan; mode total
+                // dibagi rata per qty di sini.
+                harga_satuan: effectiveHargaSatuan(item),
             })),
         }));
         form.submit(action.method, action.url, {
@@ -597,25 +673,44 @@ export default function PurchasesCreate({
                                                         </p>
                                                     </div>
                                                     <div>
-                                                        <label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
-                                                            Harga Satuan (Rp)
-                                                        </label>
+                                                        <div className="mb-1 flex items-center justify-between gap-1">
+                                                            <label className="block text-[11px] font-semibold text-muted-foreground">
+                                                                {item.harga_mode === 'total' ? 'Harga Total (Rp)' : 'Harga Satuan (Rp)'}
+                                                            </label>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    toggleHargaMode(index)
+                                                                }
+                                                                className="rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-bold text-primary transition-colors active:bg-primary/15"
+                                                            >
+                                                                {item.harga_mode === 'total' ? 'ganti satuan' : 'ganti total'}
+                                                            </button>
+                                                        </div>
                                                         <Input
                                                             type="number"
                                                             min="0"
                                                             step="any"
                                                             placeholder="0"
-                                                            value={item.harga_satuan}
+                                                            value={
+                                                                item.harga_mode === 'total'
+                                                                    ? item.harga_total
+                                                                    : item.harga_satuan
+                                                            }
                                                             onChange={(e) =>
                                                                 updateItem(
                                                                     index,
-                                                                    'harga_satuan',
+                                                                    item.harga_mode === 'total'
+                                                                        ? 'harga_total'
+                                                                        : 'harga_satuan',
                                                                     e.target.value,
                                                                 )
                                                             }
                                                         />
                                                         <p className="mt-1 text-[10px] leading-none text-muted-foreground">
-                                                            Boleh desimal
+                                                            {item.harga_mode === 'total'
+                                                                ? `dibagi ${masukStok || 0} ${satuan} = ${formatRupiah(effectiveHargaSatuan(item))}/satuan`
+                                                                : 'boleh desimal'}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -653,8 +748,8 @@ export default function PurchasesCreate({
                                             <th className="w-32 pb-2 text-left font-medium">
                                                 Qty
                                             </th>
-                                            <th className="w-44 pb-2 text-left font-medium">
-                                                Harga Satuan (Rp)
+                                            <th className="w-56 pb-2 text-left font-medium">
+                                                Harga (Rp)
                                             </th>
                                             <th className="w-40 pb-2 text-right font-medium">
                                                 Subtotal
@@ -789,26 +884,47 @@ export default function PurchasesCreate({
                                                         </p>
                                                     </td>
                                                     <td className="py-2 pr-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                toggleHargaMode(
+                                                                    index,
+                                                                )
+                                                            }
+                                                            className="mb-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary/15"
+                                                        >
+                                                            {item.harga_mode === 'total'
+                                                                ? 'Harga Total'
+                                                                : 'Harga Satuan'}
+                                                        </button>
                                                         <Input
                                                             type="number"
                                                             min="0"
                                                             step="any"
                                                             placeholder="0"
                                                             value={
-                                                                item.harga_satuan
+                                                                item.harga_mode ===
+                                                                'total'
+                                                                    ? item.harga_total
+                                                                    : item.harga_satuan
                                                             }
                                                             onChange={(e) =>
                                                                 updateItem(
                                                                     index,
-                                                                    'harga_satuan',
+                                                                    item.harga_mode ===
+                                                                        'total'
+                                                                        ? 'harga_total'
+                                                                        : 'harga_satuan',
                                                                     e.target
                                                                         .value,
                                                                 )
                                                             }
                                                         />
                                                         <p className="text-[10px] leading-none text-muted-foreground">
-                                                            Boleh desimal
-                                                            (mis. 12500.5)
+                                                            {item.harga_mode ===
+                                                            'total'
+                                                                ? `dibagi ${masukStok || 0} ${satuan} = ${formatRupiah(effectiveHargaSatuan(item))}/satuan`
+                                                                : 'boleh desimal'}
                                                         </p>
                                                     </td>
                                                     <td className="py-2 pr-2 text-right font-medium">
