@@ -20,8 +20,6 @@ class StorePelangganRequest extends FormRequest
         return [
             'kode' => 'required|string|max:20|unique:pelanggans,kode',
             'nama_pelanggan' => 'required|string|min:1|max:100',
-            'no_telepon' => 'nullable|string|max:30',
-            'alamat' => 'nullable|string',
         ];
     }
 }

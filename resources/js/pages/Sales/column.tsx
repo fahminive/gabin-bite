@@ -35,6 +35,10 @@ export type Penjualan = {
   status_pembayaran: 'belum_bayar' | 'sudah_bayar'
   status_penyerahan: 'belum_diberikan' | 'sudah_diberikan'
   nama_lengkap?: string | null
+  alamat?: string | null
+  no_telepon?: string | null
+  latitude?: number | null
+  longitude?: number | null
   tanggal_bayar?: string | null
   tanggal_diberikan?: string | null
   total: number
@@ -127,6 +131,38 @@ export const columns: ColumnDef<Penjualan>[] = [
     cell: ({ row }) => row.original.pre_order
       ? `${row.original.pre_order.kode} - ${row.original.pre_order.keterangan}`
       : "-"
+  },
+  {
+    id: "alamat",
+    meta: { className: "hidden xl:table-cell" },
+    header: "Alamat Pengantaran",
+    cell: ({ row }) => {
+      const sale = row.original;
+      if (!sale.alamat) return "-";
+      const hasCoords =
+        sale.latitude !== null &&
+        sale.latitude !== undefined &&
+        sale.longitude !== null &&
+        sale.longitude !== undefined;
+      const gmapsUrl = hasCoords
+        ? `https://www.google.com/maps?q=${sale.latitude},${sale.longitude}`
+        : null;
+      return (
+        <div className="max-w-[220px]">
+          <span className="line-clamp-2 text-xs">{sale.alamat}</span>
+          {gmapsUrl && (
+            <a
+              href={gmapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] font-semibold text-primary hover:underline"
+            >
+              Lihat di Google Maps
+            </a>
+          )}
+        </div>
+      );
+    }
   },
   {
     id: "status_pembayaran",

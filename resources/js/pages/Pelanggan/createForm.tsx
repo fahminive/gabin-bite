@@ -18,8 +18,6 @@ interface Props {
         id: number
         kode: string
         nama_pelanggan: string
-        no_telepon: string | null
-        alamat?: string | null
     }
     defaultKode?: string
 }
@@ -34,8 +32,6 @@ export function PelangganForm({
     const form = useForm({
         kode: pelanggan?.kode ?? defaultKode ?? "",
         nama_pelanggan: pelanggan?.nama_pelanggan ?? "",
-        no_telepon: pelanggan?.no_telepon ?? "",
-        alamat: pelanggan?.alamat ?? "",
     })
 
     function submit(
@@ -108,56 +104,6 @@ export function PelangganForm({
                         </FieldError>
                     )}
                 </Field>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <Field>
-                        <FieldLabel htmlFor="no_telepon">
-                            No. Telepon
-                        </FieldLabel>
-
-                        <Input
-                            id="no_telepon"
-                            placeholder="Contoh: 08123456789"
-                            value={form.data.no_telepon}
-                            onChange={(e) =>
-                                form.setData(
-                                    "no_telepon",
-                                    e.target.value
-                                )
-                            }
-                        />
-
-                        {form.errors.no_telepon && (
-                            <FieldError>
-                                {form.errors.no_telepon}
-                            </FieldError>
-                        )}
-                    </Field>
-
-                    <Field>
-                        <FieldLabel htmlFor="alamat">
-                            Alamat (opsional)
-                        </FieldLabel>
-
-                        <Input
-                            id="alamat"
-                            placeholder="Contoh: Jl. Merdeka No. 1"
-                            value={form.data.alamat}
-                            onChange={(e) =>
-                                form.setData(
-                                    "alamat",
-                                    e.target.value
-                                )
-                            }
-                        />
-
-                        {form.errors.alamat && (
-                            <FieldError>
-                                {form.errors.alamat}
-                            </FieldError>
-                        )}
-                    </Field>
-                </div>
 
                 <div className="flex gap-4 mt-6">
                     <Button

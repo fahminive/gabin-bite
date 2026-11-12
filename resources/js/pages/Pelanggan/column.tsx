@@ -26,8 +26,6 @@ export type Pelanggan = {
     id: number;
     kode: string;
     nama_pelanggan: string;
-    no_telepon: string | null;
-    alamat?: string | null;
     updated_at: string;
     penjualans?: {
         id: number;
@@ -63,16 +61,6 @@ export const columns: ColumnDef<Pelanggan>[] = [
                 </Button>
             );
         },
-    },
-    {
-        accessorKey: 'no_telepon',
-        header: 'No. Telepon',
-        cell: ({ row }) => row.getValue('no_telepon') || '-',
-    },
-    {
-        accessorKey: 'alamat',
-        header: 'Alamat',
-        cell: ({ row }) => row.getValue('alamat') || '-',
     },
     {
         accessorKey: 'updated_at',

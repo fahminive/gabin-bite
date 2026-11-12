@@ -39,9 +39,6 @@ class PelangganController extends Controller
     public function store(StorePelangganRequest $request)
     {
         $data = $request->validated();
-        if (! array_key_exists('alamat', $data) || $data['alamat'] === '') {
-            $data['alamat'] = null;
-        }
         Pelanggan::create($data);
 
         return redirect()->route('customers.index')->with('success', 'Pelanggan berhasil ditambahkan.');
@@ -57,9 +54,6 @@ class PelangganController extends Controller
     public function update(UpdatePelangganRequest $request, Pelanggan $customer)
     {
         $data = $request->validated();
-        if (array_key_exists('alamat', $data) && $data['alamat'] === '') {
-            $data['alamat'] = null;
-        }
         $customer->update($data);
 
         return redirect()->route('customers.index')->with('success', 'Pelanggan berhasil diperbarui.');

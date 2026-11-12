@@ -45,6 +45,12 @@ class PenjualanController extends Controller
         $validated = $request->validate([
             'pelanggan_id' => 'nullable|exists:pelanggans,id',
             'nama_lengkap' => 'nullable|string|max:255',
+            'alamat' => 'nullable|string|max:1000',
+            'no_telepon' => 'nullable|string|max:30',
+            // Koordinat opsional: terisi otomatis saat user paste link
+            // Google Maps yang mengandung koordinat (diparse di frontend).
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
             'metode_pembayaran_id' => 'required|exists:metode_pembayarans,id',
             'pre_order_id' => 'nullable|exists:pre_orders,id',
             'no_faktur' => 'nullable|string|max:255',
@@ -79,6 +85,10 @@ class PenjualanController extends Controller
             $penjualan = Penjualan::create([
                 'pelanggan_id' => $validated['pelanggan_id'] ?? null,
                 'nama_lengkap' => $validated['nama_lengkap'] ?? null,
+                'alamat' => $validated['alamat'] ?? null,
+                'no_telepon' => $validated['no_telepon'] ?? null,
+                'latitude' => $validated['latitude'] ?? null,
+                'longitude' => $validated['longitude'] ?? null,
                 'metode_pembayaran_id' => $validated['metode_pembayaran_id'],
                 'pre_order_id' => $validated['pre_order_id'] ?? null,
                 'no_faktur' => $noFaktur,

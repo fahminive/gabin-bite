@@ -19,8 +19,6 @@ class KategoriPelangganSeeder extends Seeder
                 ['nama_pelanggan' => $nama],
                 [
                     'kode' => $kode,
-                    'no_telepon' => null,
-                    'alamat' => 'Kategori pembeli',
                 ]
             );
         }

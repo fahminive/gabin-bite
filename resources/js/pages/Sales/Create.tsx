@@ -66,12 +66,38 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
     const form = useForm({
         pelanggan_id: '',
         nama_lengkap: '',
+        alamat: '',
+        no_telepon: '',
+        latitude: null as number | null,
+        longitude: null as number | null,
         metode_pembayaran_id: '',
         pre_order_id: '',
         no_faktur: '',
         status_pembayaran: 'belum_bayar',
         items: [] as Item[],
     });
+
+    /**
+     * Deteksi link Google Maps dan ambil koordinatnya.
+     * Mendukung format @lat,lng, q=lat,lng, dan 3!2d3 (place links).
+     * Hasil null bila bukan link / tidak ada koordinat.
+     */
+    function parseAlamat(value: string): { alamat: string; lat: number | null; lng: number | null } {
+        const gmapsMatch = value.match(
+            /(?:@(-?\d+\.\d+),(-?\d+\.\d+)|[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)|!3d(-?\d+\.\d+)!4d(-?\d+\.\d+))/,
+        );
+
+        if (gmapsMatch) {
+            const lat = Number(gmapsMatch[1] ?? gmapsMatch[3] ?? gmapsMatch[5]);
+            const lng = Number(gmapsMatch[2] ?? gmapsMatch[4] ?? gmapsMatch[6]);
+
+            if (! Number.isNaN(lat) && ! Number.isNaN(lng)) {
+                return { alamat: value, lat, lng };
+            }
+        }
+
+        return { alamat: value, lat: null, lng: null };
+    }
 
     // Default pelanggan selalu kategori "Umum" (orang biasa).
     useEffect(() => {
@@ -183,6 +209,44 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
                                             onChange={e => form.setData('nama_lengkap', e.target.value)}
                                         />
                                         {form.errors.nama_lengkap && <FieldError>{form.errors.nama_lengkap}</FieldError>}
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel htmlFor="no_telepon">No. Telepon (Opsional)</FieldLabel>
+                                        <Input
+                                            id="no_telepon"
+                                            type="tel"
+                                            placeholder="Untuk dihubungi kurir saat sampai"
+                                            value={form.data.no_telepon}
+                                            onChange={e => form.setData('no_telepon', e.target.value)}
+                                        />
+                                        {form.errors.no_telepon && <FieldError>{form.errors.no_telepon}</FieldError>}
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel htmlFor="alamat">
+                                            Alamat Pengantaran (Opsional)
+                                        </FieldLabel>
+                                        <Input
+                                            id="alamat"
+                                            placeholder="Alamat biasa atau paste link Google Maps"
+                                            value={form.data.alamat}
+                                            onChange={e => {
+                                                const parsed = parseAlamat(e.target.value);
+                                                form.setData('alamat', parsed.alamat);
+                                                form.setData('latitude', parsed.lat);
+                                                form.setData('longitude', parsed.lng);
+                                            }}
+                                        />
+                                        {form.errors.alamat && <FieldError>{form.errors.alamat}</FieldError>}
+                                        {form.data.latitude !== null && form.data.longitude !== null && (
+                                            <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                                Titik peta terdeteksi: {form.data.latitude.toFixed(5)}, {form.data.longitude.toFixed(5)}
+                                            </p>
+                                        )}
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Paste link Google Maps (Share - Copy link) untuk titik peta rute pengantaran.
+                                        </p>
                                     </Field>
                                 </div>
 

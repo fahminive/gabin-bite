@@ -22,7 +22,6 @@ export default function PelangganIndex({ customers }: { customers: Pelanggan[] }
     }, [flash]);
 
     const totalPelanggan = customers.length;
-    const denganTelp = customers.filter(c => c.no_telepon).length;
 
     return (
         <>
@@ -55,12 +54,12 @@ export default function PelangganIndex({ customers }: { customers: Pelanggan[] }
                     </Card>
                     <Card className="rounded-2xl border border-border/80 shadow-xs">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 p-3.5 sm:p-4">
-                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">No. WhatsApp / Telp</CardTitle>
+                            <CardTitle className="text-xs sm:text-sm font-extrabold text-muted-foreground truncate">Kategori Aktif</CardTitle>
                             <PhoneCall className="h-4 w-4 text-emerald-500 shrink-0" />
                         </CardHeader>
                         <CardContent className="p-3.5 pt-0 sm:p-4 sm:pt-0">
-                            <div className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{denganTelp}</div>
-                            <p className="text-[10px] text-muted-foreground">Siap dihubungi</p>
+                            <div className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{totalPelanggan}</div>
+                            <p className="text-[10px] text-muted-foreground">Siap dipakai transaksi</p>
                         </CardContent>
                     </Card>
                 </div>
