@@ -12,6 +12,7 @@ import {
     Wallet,
 } from 'lucide-react';
 import GabinMascot from '@/components/gabin-mascot';
+import { PwaHeadTags } from '@/components/pwa-head-tags';
 
 const marqueeItems = [
     'Gabin renyah',
@@ -75,6 +76,8 @@ export default function Welcome() {
     return (
         <>
             <Head title="gabinbite.pwt: Gabin renyah, buku rapi" />
+
+            <PwaHeadTags />
 
             <div className="relative min-h-svh overflow-hidden bg-background text-foreground">
                 {/* decorative background */}

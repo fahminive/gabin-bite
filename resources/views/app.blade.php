@@ -36,7 +36,8 @@
         </style>
 
         <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/logo-gabinbite.svg">
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180">
+        <link rel="manifest" href="/manifest.webmanifest">
 
         @fonts
 
