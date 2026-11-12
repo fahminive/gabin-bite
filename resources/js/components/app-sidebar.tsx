@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, BadgeDollarSign, Banknote, ChartCandlestick, ShoppingCart, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, Users, Split, CalendarDays, ClipboardList } from 'lucide-react';
+import { LayoutGrid, Wheat, PackageSearch, TruckIcon, BookUser, BadgeDollarSign, Banknote, ChartCandlestick, ShoppingCart, CookingPot, SearchCheck, BookOpenText, ArrowDownUp, Scale, Users, Split, CalendarDays, ClipboardList, Map } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -43,6 +43,11 @@ const salesNavItems: NavItem[] = [
         title: 'Daftar PO Penjualan',
         href: sales.index(),
         icon: ClipboardList,
+    },
+    {
+        title: 'Rute Pengantaran',
+        href: '/delivery-route',
+        icon: Map,
     },
 ]
 

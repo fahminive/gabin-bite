@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\BahanBakuController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeliveryRouteController;
 use App\Http\Controllers\ProdukController;
 use App\Http\Controllers\PemasokController;
 use App\Http\Controllers\PelangganController;
@@ -31,6 +32,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports/income-statement/pdf', [LaporanController::class, 'incomeStatementPdf'])->name('reports.income-statement.pdf');
     Route::get('reports/balance-sheet', [LaporanController::class, 'balanceSheet'])->name('reports.balance-sheet');
     Route::get('reports/balance-sheet/pdf', [LaporanController::class, 'balanceSheetPdf'])->name('reports.balance-sheet.pdf');
+
+    // Rute pengantaran (peta + optimasi urutan kunjungan)
+    Route::get('delivery-route', [DeliveryRouteController::class, 'index'])->name('delivery-route.index');
+    Route::get('delivery-route/batches/{batch}/stops', [DeliveryRouteController::class, 'batchStops'])->name('delivery-route.stops');
+    Route::post('delivery-route/stops/point', [DeliveryRouteController::class, 'setStopPoint'])->name('delivery-route.set-point');
+    Route::post('delivery-route/dapur', [DeliveryRouteController::class, 'setDapur'])->name('delivery-route.set-dapur');
 
     // Route Write
     Route::middleware(['role:admin,finance,owner'])->group(function () {
