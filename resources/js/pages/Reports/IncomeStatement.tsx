@@ -339,7 +339,31 @@ export default function IncomeStatement({
                                 </span>
                             </div>
                             {perVarian.length > 0 && (
-                                <div className="overflow-x-auto rounded-lg border bg-muted/20">
+                                <>
+                                    {/* Mobile: baris per varian */}
+                                    <div className="rounded-lg border bg-muted/20 md:hidden">
+                                        <div className="flex flex-col divide-y">
+                                            {perVarian.map((v) => (
+                                                <div key={v.produk_id} className="flex items-center justify-between gap-2 px-3 py-2">
+                                                    <span className="min-w-0 truncate text-xs font-semibold">
+                                                        {v.nama_produk}
+                                                        <span className="ml-1 text-[10px] font-medium text-muted-foreground">{v.kode}</span>
+                                                    </span>
+                                                    <span className="shrink-0 text-right text-xs">
+                                                        <span className="font-semibold">
+                                                            {formatRupiah(v.pendapatan)}
+                                                        </span>
+                                                        <span className="block text-[10px] text-muted-foreground">
+                                                            {nfQty(v.qty_terjual)} {v.satuan} x {formatRupiah(v.harga_rata)}
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Desktop: tabel */}
+                                    <div className="hidden overflow-x-auto rounded-lg border bg-muted/20 md:block">
                                     <table className="w-full min-w-[480px] text-xs">
                                         <thead>
                                             <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -371,7 +395,8 @@ export default function IncomeStatement({
                                             ))}
                                         </tbody>
                                     </table>
-                                </div>
+                                    </div>
+                                </>
                             )}
                             <div className="flex items-center justify-between rounded bg-muted/30 p-2 text-sm font-bold">
                                 <span>Total Pendapatan</span>
@@ -391,7 +416,31 @@ export default function IncomeStatement({
                                 </span>
                             </div>
                             {perVarian.length > 0 && (
-                                <div className="overflow-x-auto rounded-lg border bg-muted/20">
+                                <>
+                                    {/* Mobile: baris per varian */}
+                                    <div className="rounded-lg border bg-muted/20 md:hidden">
+                                        <div className="flex flex-col divide-y">
+                                            {perVarian.map((v) => (
+                                                <div key={v.produk_id} className="flex items-center justify-between gap-2 px-3 py-2">
+                                                    <span className="min-w-0 truncate text-xs font-semibold">
+                                                        {v.nama_produk}
+                                                        <span className="ml-1 text-[10px] font-medium text-muted-foreground">{v.kode}</span>
+                                                    </span>
+                                                    <span className="shrink-0 text-right text-xs">
+                                                        <span className="font-semibold text-destructive">
+                                                            ({formatRupiah(v.hpp)})
+                                                        </span>
+                                                        <span className="block text-[10px] text-muted-foreground">
+                                                            {nfQty(v.qty_terjual)} {v.satuan} x {formatRupiah(v.hpp / Math.max(v.qty_terjual, 1))}
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Desktop: tabel */}
+                                    <div className="hidden overflow-x-auto rounded-lg border bg-muted/20 md:block">
                                     <table className="w-full min-w-[480px] text-xs">
                                         <thead>
                                             <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -423,7 +472,8 @@ export default function IncomeStatement({
                                             ))}
                                         </tbody>
                                     </table>
-                                </div>
+                                    </div>
+                                </>
                             )}
                             <div className="flex items-center justify-between rounded bg-muted/30 p-2 text-sm font-bold">
                                 <span>Total Beban HPP</span>

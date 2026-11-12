@@ -115,7 +115,40 @@ export default function ProdukIndex({ user, products, terjualSeumurHidup = 0, be
                                 Belum ada penjualan yang diserahkan.
                             </p>
                         ) : (
-                            <div className="overflow-x-auto">
+                            <>
+                                {/* Mobile: baris ringkas per varian */}
+                                <div className="flex flex-col divide-y md:hidden">
+                                    {terjualPerVarian.map((v) => (
+                                        <div key={v.produk_id} className="flex items-center justify-between gap-2 py-2.5">
+                                            <span className="min-w-0 truncate text-sm font-medium">
+                                                {v.nama_produk}
+                                                <span className="ml-1.5 text-xs text-muted-foreground">{v.kode}</span>
+                                            </span>
+                                            <span className="shrink-0 text-right text-sm">
+                                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                    {nf(v.qty_terjual)} {v.satuan}
+                                                </span>
+                                                <span className="block text-[11px] text-muted-foreground">
+                                                    {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v.nilai_terjual)}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    ))}
+                                    <div className="flex items-center justify-between py-2.5 font-bold">
+                                        <span className="text-sm">Total</span>
+                                        <span className="text-right text-sm">
+                                            <span className="text-emerald-600 dark:text-emerald-400">{nf(terjualSeumurHidup)}</span>
+                                            <span className="block text-[11px] font-medium text-muted-foreground">
+                                                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(
+                                                    terjualPerVarian.reduce((sum, v) => sum + Number(v.nilai_terjual), 0),
+                                                )}
+                                            </span>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Desktop: tabel */}
+                                <div className="hidden overflow-x-auto md:block">
                                 <table className="w-full min-w-[420px] text-sm">
                                     <thead>
                                         <tr className="border-b text-left text-xs text-muted-foreground">
@@ -156,7 +189,8 @@ export default function ProdukIndex({ user, products, terjualSeumurHidup = 0, be
                                         </tr>
                                     </tfoot>
                                 </table>
-                            </div>
+                                </div>
+                            </>
                         )}
                     </CardContent>
                 </Card>
