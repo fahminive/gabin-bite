@@ -498,7 +498,146 @@ export default function PurchasesCreate({
                             </Button>
                         </CardHeader>
                         <CardContent>
-                            <div className="custom-scrollbar touch-scroll overflow-x-auto">
+                            {/* Mobile: kartu per item */}
+                            <div className="flex flex-col gap-3 md:hidden">
+                                {items.map((item, index) => {
+                                    const bahan = bahanBakus.find(
+                                        (b) =>
+                                            b.id ===
+                                            Number(item.bahan_baku_id),
+                                    );
+                                    const satuan = bahan?.satuan ?? '-';
+                                    const masukStok = effectiveQty(item);
+
+                                    return (
+                                        <div
+                                            key={index}
+                                            className="rounded-xl border border-border/70 bg-card p-3 shadow-xs"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs font-bold text-muted-foreground">
+                                                    Item {index + 1}
+                                                </span>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => removeItem(index)}
+                                                    disabled={items.length === 1}
+                                                    className="h-9 w-9 text-destructive hover:text-destructive"
+                                                    aria-label="Hapus item"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                            <div className="mt-2 flex flex-col gap-2">
+                                                <Select
+                                                    value={item.bahan_baku_id}
+                                                    onValueChange={(val) =>
+                                                        updateItem(index, 'bahan_baku_id', val)
+                                                    }
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue placeholder="Pilih bahan baku" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {bahanBakus.map((b) => (
+                                                            <SelectItem key={b.id} value={String(b.id)}>
+                                                                {b.nama_bahan} ({b.satuan})
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                {(form.errors as any)[`items.${index}.bahan_baku_id`] && (
+                                                    <p className="text-xs text-destructive">
+                                                        {(form.errors as any)[`items.${index}.bahan_baku_id`]}
+                                                    </p>
+                                                )}
+                                                {item.netto_pcs != null && (
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        Netto/Pcs: {item.netto_pcs} {satuan}
+                                                    </p>
+                                                )}
+                                                <label className="flex items-center gap-2 text-xs">
+                                                    <Checkbox
+                                                        checked={item.beli_per_bungkus}
+                                                        onCheckedChange={(checked: boolean) =>
+                                                            toggleBeliPerBungkus(index, checked)
+                                                        }
+                                                    />
+                                                    Beli per bungkus
+                                                </label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+                                                            Qty
+                                                        </label>
+                                                        <Input
+                                                            type="number"
+                                                            min="1"
+                                                            step="1"
+                                                            placeholder="0"
+                                                            value={
+                                                                item.beli_per_bungkus
+                                                                    ? item.qty_bungkus
+                                                                    : item.qty
+                                                            }
+                                                            onChange={(e) =>
+                                                                updateItem(
+                                                                    index,
+                                                                    item.beli_per_bungkus
+                                                                        ? 'qty_bungkus'
+                                                                        : 'qty',
+                                                                    e.target.value,
+                                                                )
+                                                            }
+                                                        />
+                                                        <p className="mt-1 text-[10px] leading-none text-muted-foreground">
+                                                            Masuk stok: {masukStok} {satuan}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+                                                            Harga Satuan (Rp)
+                                                        </label>
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="any"
+                                                            placeholder="0"
+                                                            value={item.harga_satuan}
+                                                            onChange={(e) =>
+                                                                updateItem(
+                                                                    index,
+                                                                    'harga_satuan',
+                                                                    e.target.value,
+                                                                )
+                                                            }
+                                                        />
+                                                        <p className="mt-1 text-[10px] leading-none text-muted-foreground">
+                                                            Boleh desimal
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <p className="text-right text-sm font-bold">
+                                                    {formatRupiah(calculateSubtotal(item))}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2.5">
+                                    <span className="text-sm font-semibold text-muted-foreground">
+                                        Total Pembelian:
+                                    </span>
+                                    <span className="text-base font-bold">
+                                        {formatRupiah(calculateTotal())}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Desktop: tabel */}
+                            <div className="custom-scrollbar touch-scroll hidden overflow-x-auto md:block">
                                 <table className="w-full min-w-[560px] text-sm">
                                     <thead>
                                         <tr className="border-b text-muted-foreground">
@@ -728,17 +867,22 @@ export default function PurchasesCreate({
                     </Card>
 
                     {/* Action Buttons */}
-                    <div className="flex gap-3">
+                    <div className="sticky bottom-20 z-20 flex gap-3 rounded-2xl border border-border/70 bg-background/95 p-2 shadow-lg backdrop-blur-xl md:static md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
                         <Button
                             type="button"
                             variant="outline"
+                            className="h-11 flex-1 rounded-xl md:h-9 md:flex-initial"
                             onClick={() =>
                                 router.visit(purchasesAction.index().url)
                             }
                         >
                             Batal
                         </Button>
-                        <Button type="submit" disabled={form.processing}>
+                        <Button
+                            type="submit"
+                            disabled={form.processing}
+                            className="h-11 flex-[2] rounded-xl md:h-9 md:flex-initial"
+                        >
                             {form.processing
                                 ? 'Menyimpan...'
                                 : 'Simpan Pembelian'}

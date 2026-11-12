@@ -253,7 +253,99 @@ export default function SalesCreate({ products, customers, paymentMethods, batch
                             </Button>
                         </CardHeader>
                         <CardContent>
-                            <div className="overflow-x-auto custom-scrollbar touch-scroll">
+                            {/* Mobile: kartu per item */}
+                            <div className="flex flex-col gap-3 md:hidden">
+                                {items.map((item, index) => (
+                                    <div
+                                        key={index}
+                                        className="rounded-xl border border-border/70 bg-card p-3 shadow-xs"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs font-bold text-muted-foreground">
+                                                Item {index + 1}
+                                            </span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => removeItem(index)}
+                                                disabled={items.length === 1}
+                                                className="h-9 w-9 text-destructive hover:text-destructive"
+                                                aria-label="Hapus item"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                        <div className="mt-2 flex flex-col gap-2">
+                                            <Select
+                                                value={item.produk_id}
+                                                onValueChange={val => updateItem(index, 'produk_id', val)}
+                                            >
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Pilih produk" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {products.map(p => (
+                                                        <SelectItem key={p.id} value={String(p.id)}>
+                                                            {p.nama_produk} (Stok: {p.stok} {p.satuan})
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {(form.errors as any)[`items.${index}.produk_id`] && (
+                                                <p className="text-xs text-destructive">{(form.errors as any)[`items.${index}.produk_id`]}</p>
+                                            )}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+                                                        Qty
+                                                    </label>
+                                                    <Input
+                                                        type="number"
+                                                        min="1"
+                                                        placeholder="0"
+                                                        value={item.qty}
+                                                        onChange={e => updateItem(index, 'qty', e.target.value)}
+                                                    />
+                                                    {(form.errors as any)[`items.${index}.qty`] && (
+                                                        <p className="mt-1 text-xs text-destructive">{(form.errors as any)[`items.${index}.qty`]}</p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+                                                        Harga (Rp)
+                                                    </label>
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        step="any"
+                                                        placeholder="0"
+                                                        value={item.harga_satuan}
+                                                        onChange={e => updateItem(index, 'harga_satuan', e.target.value)}
+                                                    />
+                                                    {(form.errors as any)[`items.${index}.harga_satuan`] && (
+                                                        <p className="mt-1 text-xs text-destructive">{(form.errors as any)[`items.${index}.harga_satuan`]}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <p className="text-right text-sm font-bold">
+                                                {formatRupiah(calculateSubtotal(item))}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2.5">
+                                    <span className="text-sm font-semibold text-muted-foreground">
+                                        Total Penjualan:
+                                    </span>
+                                    <span className="text-base font-bold">
+                                        {formatRupiah(calculateTotal())}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Desktop: tabel */}
+                            <div className="hidden overflow-x-auto custom-scrollbar touch-scroll md:block">
                                 <table className="min-w-[560px] w-full text-sm">
                                     <thead>
                                         <tr className="border-b text-muted-foreground">
