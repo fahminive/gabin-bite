@@ -221,7 +221,8 @@ export default function ProductionCreate({ products, bahanBakus, recipes }: Prop
                             </Button>
                         </CardHeader>
                         <CardContent>
-                            <div className="overflow-x-auto">
+                            {/* Desktop: tabel; Mobile: kartu stack (qty desimal terbaca jelas) */}
+                            <div className="hidden md:block overflow-x-auto">
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="border-b text-muted-foreground">
@@ -258,7 +259,9 @@ export default function ProductionCreate({ products, bahanBakus, recipes }: Prop
                                                         type="number"
                                                         min="0.001"
                                                         step="any"
+                                                        inputMode="decimal"
                                                         placeholder="0"
+                                                        className="text-base"
                                                         value={item.qty_bahan_dipakai}
                                                         onChange={e => updateItem(index, 'qty_bahan_dipakai', e.target.value)}
                                                     />
@@ -282,6 +285,68 @@ export default function ProductionCreate({ products, bahanBakus, recipes }: Prop
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
+
+                            {/* Mobile: kartu per baris, qty besar dgn satuan terlihat */}
+                            <div className="flex flex-col divide-y md:hidden">
+                                {items.map((item, index) => {
+                                    const bahan = bahanBakus.find(b => String(b.id) === item.bahan_baku_id);
+                                    return (
+                                        <div key={index} className="py-2.5">
+                                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                                                <span className="text-xs font-bold text-muted-foreground">
+                                                    Bahan #{index + 1}
+                                                </span>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => removeItem(index)}
+                                                    disabled={items.length === 1}
+                                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                            <Select
+                                                value={item.bahan_baku_id}
+                                                onValueChange={val => updateItem(index, 'bahan_baku_id', val)}
+                                            >
+                                                <SelectTrigger className="w-full h-9 text-xs">
+                                                    <SelectValue placeholder="Pilih bahan baku" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {bahanBakus.map(b => (
+                                                        <SelectItem key={b.id} value={String(b.id)}>
+                                                            {b.nama_bahan} (Stok: {b.stok} {b.satuan})
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <div className="mt-1.5 flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    min="0.001"
+                                                    step="any"
+                                                    inputMode="decimal"
+                                                    placeholder="0"
+                                                    className="h-11 text-lg font-bold tabular-nums"
+                                                    value={item.qty_bahan_dipakai}
+                                                    onChange={e => updateItem(index, 'qty_bahan_dipakai', e.target.value)}
+                                                    aria-label={`Qty dipakai bahan ${index + 1}`}
+                                                />
+                                                <span className="w-16 shrink-0 text-xs font-semibold text-muted-foreground">
+                                                    {bahan?.satuan ?? ''}
+                                                </span>
+                                            </div>
+                                            {((form.errors as any)[`items.${index}.bahan_baku_id`] || (form.errors as any)[`items.${index}.qty_bahan_dipakai`]) && (
+                                                <p className="text-xs text-destructive mt-1">
+                                                    {(form.errors as any)[`items.${index}.bahan_baku_id`] ?? (form.errors as any)[`items.${index}.qty_bahan_dipakai`]}
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
 
                             {(form.errors as any)['items'] && (

@@ -15,6 +15,34 @@ export interface LatLng {
  * `countrycodes=id` membatasi ke Indonesia supaya hasil lebih relevan.
  */
 export async function geocodeAlamat(alamat: string): Promise<LatLng | null> {
+    // Coba lokal dulu (gratis, tanpa rate limit server)
+    const lokal = await geocodeAlamatLokal(alamat);
+    if (lokal) {
+        return lokal;
+    }
+
+    // Server-side (geocodeProgresif dgn varian ringkas - lebih sering ketemu)
+    try {
+        const csrf =
+            document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+        const res = await fetch('/delivery-route/resolve-gmaps', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
+            body: JSON.stringify({ q: alamat }),
+        });
+        if (res.ok) {
+            const data = (await res.json()) as { titik: null | { lat: number; lng: number } };
+            if (data.titik) {
+                return { lat: data.titik.lat, lng: data.titik.lng };
+            }
+        }
+    } catch {
+        // diam
+    }
+    return null;
+}
+
+async function geocodeAlamatLokal(alamat: string): Promise<LatLng | null> {
     const url =
         'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=id&q=' +
         encodeURIComponent(alamat);
@@ -70,7 +98,7 @@ async function osrmTrip(koordinat: LatLng[], roundtrip: boolean): Promise<OsrmTr
     const coordStr = koordinat.map((c) => `${c.lng},${c.lat}`).join(';');
     const url =
         `https://router.project-osrm.org/trip/v1/driving/${coordStr}` +
-        `?source=first&roundtrip=${roundtrip ? 'true' : 'false'}`;
+        `?source=first&roundtrip=${roundtrip ? 'true' : 'false'}&geometries=geojson`;
 
     try {
         const res = await fetch(url);
@@ -128,7 +156,7 @@ export async function osrmRouteFixed(koordinat: LatLng[]): Promise<OsrmRouteResu
     }
 
     const coordStr = koordinat.map((c) => `${c.lng},${c.lat}`).join(';');
-    const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
 
     try {
         const res = await fetch(url);
@@ -151,6 +179,103 @@ export async function osrmRouteFixed(koordinat: LatLng[]): Promise<OsrmRouteResu
         const route = data.routes[0];
         return {
             geometri: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+            jarak: route.distance,
+            durasi: route.duration,
+        };
+    } catch {
+        return null;
+    }
+}
+
+export interface OsrmLegsResult {
+    /** geometri tiap leg (index 0 = dapur -> stop pertama) */
+    geometriPerLeg: Array<Array<[number, number]>>;
+    /** jarak kumulatif tiap titik tujuan (meter), index = urutan kunjungan */
+    jarakPerTitik: number[];
+    /** durasi kumulatif (detik) */
+    durasiPerTitik: number[];
+    /** total */
+    jarak: number;
+    durasi: number;
+}
+
+/**
+ * Rute jalan urutan tertentu dgn PECOHAN per leg (dapur->t1, t1->t2, ...).
+ * Dipakai untuk garis preview ke tiap titik & info jarak per kunjungan.
+ */
+export async function osrmLegs(koordinat: LatLng[]): Promise<OsrmLegsResult | null> {
+    if (koordinat.length < 2) {
+        return null;
+    }
+
+    const coordStr = koordinat.map((c) => `${c.lng},${c.lat}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson&annotations=distance,duration&steps=false`;
+
+    try {
+        const res = await fetch(url);
+        if (!res.ok) {
+            return null;
+        }
+        const data = (await res.json()) as {
+            code: string;
+            routes: Array<{
+                distance: number;
+                duration: number;
+                geometry: { coordinates: Array<[number, number]> };
+                legs: Array<{
+                    distance: number;
+                    duration: number;
+                    annotation?: { distance: number[]; duration: number[] };
+                }>;
+            }>;
+        };
+
+        if (data.code !== 'Ok' || !data.routes?.length) {
+            return null;
+        }
+
+        const route = data.routes[0];
+        // Pecah geometri full per leg pakai jarak node-nya
+        const coords = route.geometry.coordinates;
+        const nodeDist = route.legs.flatMap((leg) => leg.annotation?.distance ?? []);
+
+        const geometriPerLeg: Array<Array<[number, number]>> = [];
+        let start = 0;
+        for (const leg of route.legs) {
+            const jmlNode = leg.annotation?.distance?.length ?? 0;
+            const nodes = nodeDist.slice(start, start + jmlNode);
+            let acc = 0;
+            let end = start;
+            for (let i = 0; i < nodes.length; i++) {
+                acc += nodes[i];
+                if (acc >= leg.distance * 0.999 || i === nodes.length - 1) {
+                    end = start + i + 1;
+                    break;
+                }
+            }
+            const seg = coords
+                .slice(start, Math.max(end + 1, start + 2))
+                .map(([lng, lat]) => [lat, lng] as [number, number]);
+            geometriPerLeg.push(seg);
+            start = end;
+        }
+
+        // Jarak/durasi kumulatif per titik tujuan
+        let jarakKum = 0;
+        let durasiKum = 0;
+        const jarakPerTitik: number[] = [];
+        const durasiPerTitik: number[] = [];
+        for (const leg of route.legs) {
+            jarakKum += leg.distance;
+            durasiKum += leg.duration;
+            jarakPerTitik.push(jarakKum);
+            durasiPerTitik.push(durasiKum);
+        }
+
+        return {
+            geometriPerLeg,
+            jarakPerTitik,
+            durasiPerTitik,
             jarak: route.distance,
             durasi: route.duration,
         };
@@ -316,7 +441,6 @@ export async function titikDariAlamat(alamat: string): Promise<LatLng | null> {
     // 3. Alamat teks biasa
     return geocodeAlamat(teks);
 }
-
 /** Ekstrak koordinat dari teks/link gmaps dgn berbagai pola umum. */
 export function ekstrakKoordinat(teks: string): LatLng | null {
     // @lat,lng (mis. @-6.175392,106.827153,15z)

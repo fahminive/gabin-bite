@@ -9,6 +9,13 @@ interface LeafletMapProps {
     dapur?: { lat: number; lng: number; nama?: string } | null;
     /** [lat, lng][] urutan rute hasil optimasi - digambar polyline */
     polyline?: Array<[number, number]>;
+    /**
+     * Garis preview per titik (leg dapur->t1, t1->t2, ...). Bila titikAktif
+     * diset, hanya leg menuju titik itu yang digambar tebal.
+     */
+    garisPerTitik?: Array<Array<[number, number]>>;
+    /** Index leg yang sedang dituju (0-based dari stop; undefined = semua) */
+    titikAktif?: number | null;
     /** Posisi GPS kurir saat ini (titik biru + lingkaran akurasi) */
     titikSaya?: { lat: number; lng: number; akurasi?: number } | null;
     /** Klik peta (untuk pin titik manual / set dapur) */
@@ -52,6 +59,8 @@ export function LeafletMap({
     markers,
     dapur,
     polyline,
+    garisPerTitik,
+    titikAktif,
     titikSaya,
     onMapClick,
     className = 'h-[420px] w-full',
@@ -157,6 +166,13 @@ export function LeafletMap({
     const markersKey = JSON.stringify(markers);
     const dapurKey = dapur ? `${dapur.lat},${dapur.lng}` : '';
     const polylineKey = JSON.stringify(polyline ?? []);
+    const garisKey = JSON.stringify(garisPerTitik ?? []);
+    const aktifKey = titikAktif === null || titikAktif === undefined ? 'all' : String(titikAktif);
+    const garisLayersRef = useRef<L.Polyline[]>([]);
+    const garisKeyRef = useRef('');
+    const aktifKeyRef = useRef('all');
+    garisKeyRef.current = garisKey;
+    aktifKeyRef.current = aktifKey;
 
     useEffect(() => {
         const map = mapRef.current;
@@ -188,7 +204,7 @@ export function LeafletMap({
             polylineLayerRef.current = L.polyline(polyline, {
                 color: '#23150f',
                 weight: 4,
-                opacity: 0.75,
+                opacity: 0.4,
                 dashArray: '8 6',
             }).addTo(map);
         }
@@ -207,6 +223,36 @@ export function LeafletMap({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [markersKey, dapurKey, polylineKey]);
+
+    // ===== Preview garis jalan per titik (leg) =====
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) {
+            return;
+        }
+
+        garisLayersRef.current.forEach((l) => l.remove());
+        garisLayersRef.current = [];
+
+        if (!garisPerTitik || garisPerTitik.length === 0) {
+            return;
+        }
+
+        garisPerTitik.forEach((leg, i) => {
+            if (leg.length < 2) {
+                return;
+            }
+            const aktif = titikAktif === null || titikAktif === undefined || titikAktif === i;
+            const layer = L.polyline(leg, {
+                color: aktif ? '#E94F87' : '#23150f',
+                weight: aktif ? 6 : 3.5,
+                opacity: aktif ? 0.95 : 0.45,
+                dashArray: aktif ? undefined : '2 6',
+            }).addTo(map);
+            garisLayersRef.current.push(layer);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [garisKey, aktifKey]);
 
     return <div ref={containerRef} className={className} />;
 }

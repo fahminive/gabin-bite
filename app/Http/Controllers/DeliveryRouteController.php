@@ -47,6 +47,7 @@ class DeliveryRouteController extends Controller
                 'no_telepon',
                 'latitude',
                 'longitude',
+                'status_penyerahan',
             ])
             ->map(fn ($row) => [
                 'id' => (int) $row->id,
@@ -57,6 +58,7 @@ class DeliveryRouteController extends Controller
                 'latitude' => $row->latitude !== null ? (float) $row->latitude : null,
                 'longitude' => $row->longitude !== null ? (float) $row->longitude : null,
                 'punya_titik' => $row->latitude !== null && $row->longitude !== null,
+                'status_penyerahan' => $row->status_penyerahan,
             ])
             ->all();
 
@@ -97,10 +99,18 @@ class DeliveryRouteController extends Controller
     public function resolveGmaps(Request $request): \Illuminate\Http\JsonResponse
     {
         $validated = $request->validate([
-            'url' => 'required|url|max:2048',
+            'url' => 'required_without:q|nullable|url|max:2048',
+            'q' => 'required_without:url|nullable|string|max:500',
         ]);
 
-        $url = $validated['url'];
+        // Mode geocode alamat teks (estimasi server yang lebih toleran)
+        if (! empty($validated['q'])) {
+            $titik = $this->geocodeProgresif($validated['q']);
+
+            return response()->json(['titik' => $titik]);
+        }
+
+        $url = (string) $validated['url'];
 
         // 1. Koordinat langsung di URL asli (@lat,lng / q= / !3d!4d)
         $titik = $this->ekstrakKoordinat($url);
@@ -123,17 +133,141 @@ class DeliveryRouteController extends Controller
             return response()->json(['titik' => $titik]);
         }
 
-        // 3. URL final tak berkoordinat (place link): cari koordinat di body
-        $body = $res->body();
-        if (preg_match('/(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/', $body, $m)) {
-            $lat = (float) $m[1];
-            $lng = (float) $m[2];
-            if (abs($lat) <= 90 && abs($lng) <= 180 && ($lat != 0 || $lng != 0)) {
-                return response()->json(['titik' => ['lat' => $lat, 'lng' => $lng]]);
+        // 3. URL final tanpa koordinat: cek q=<nama tempat> (plus code /
+        // alamat). JANGAN parse koordinat dari body HTML Google - HTML-nya
+        // mengandung koordinat server yang acak (bisa "ke China").
+        // Contoh nyata: q=H6XW+4XX Seblak Tararasik, Karang Bawang,
+        // Grendeng, Purwokerto Utara -> geocode nama tempatnya.
+        $namaTempat = $this->ambilParamQ($finalUrl);
+        if ($namaTempat !== null) {
+            $titik = $this->geocodeProgresif($namaTempat);
+            if ($titik) {
+                return response()->json(['titik' => $titik]);
+            }
+        }
+
+        // 4. Place link tanpa q (mis. /maps/place/Seblak+Tararasik/...):
+        // ekstrak nama tempat dari path URL lalu geocode.
+        if (preg_match('#/maps/place/([^/]+)#', $finalUrl, $m)) {
+            $namaTempat = urldecode($m[1]);
+            $namaTempat = preg_replace('/@.*$/', '', $namaTempat); // buang @lat,lng bila ada
+            if ($namaTempat !== '' && ! isGmapsHostOnly($namaTempat)) {
+                $titik = $this->geocodeProgresif($namaTempat);
+                if ($titik) {
+                    return response()->json(['titik' => $titik]);
+                }
             }
         }
 
         return response()->json(['titik' => null]);
+    }
+
+    /** Ambil nilai param ?q= dari URL (decoded), atau null. */
+    private function ambilParamQ(string $url): ?string
+    {
+        $query = parse_url($url, PHP_URL_QUERY);
+        if (! $query) {
+            return null;
+        }
+        parse_str($query, $params);
+        $q = $params['q'] ?? $params['query'] ?? null;
+        if (! is_string($q) || $q === '') {
+            return null;
+        }
+
+        // Buang plus code di awal (mis. "H6XW+4XX Seblak ...") - Nominatim
+        // tidak paham plus code, nama tempatnya saja yang dicari.
+        $q = preg_replace('/\b[23456789CFGHJMPQRVWX]{4,6}\+[23456789CFGHJMPQRVWX]{2,3}\b\s*/u', '', $q);
+
+        return trim($q);
+    }
+
+    /**
+     * Geocode progresif: alamat lengkap hasil redirect gmaps hampir selalu
+     * GAGAL di Nominatim bila langsung (terlalu panjang / region membloat).
+     * Strategi teruji: buang segmen umum (negara/provinsi/postal/regency),
+     * lalu coba beberapa varian ringkas. Max 4 request, hormati rate limit
+     * 1 req/s. Contoh nyata yang kini berhasil:
+     * "H6XW+4XX Seblak Tararasik, Karang Bawang, Grendeng, Purwokerto
+     *   Utara, Banyumas Regency, Central Java 53122, Indonesia"
+     *   -> varian "Karang Bawang, Purwokerto Utara"-like di sekitar
+     *      Purwokerto (bukan lagi koordinat server Google).
+     */
+    private function geocodeProgresif(string $alamat): ?array
+    {
+        // Buang plus code di mana pun posisinya. Catatan: parse_str sudah
+        // mengubah '+' menjadi spasi, jadi pola harus menerima spasi juga.
+        // Charset plus code tidak memuat vokal, jadi kata biasa (yang pasti
+        // ber vowels) aman dari pola ini.
+        $alamat = preg_replace('/\b[23456789CFGHJMPQRVWX]{4,6}[+\s][23456789CFGHJMPQRVWX]{2,3}\b\s*/u', '', $alamat);
+
+        // Pecah segmen & buang yang berisik (negara, provinsi, postal, "Regency"/"City"/"Kabupaten")
+        $segmen = array_values(array_filter(
+            array_map('trim', explode(',', $alamat)),
+            fn ($s) => $s !== '' && ! $this->segmenUmum($s),
+        ));
+
+        if (empty($segmen)) {
+            $segmen = [trim($alamat)];
+        }
+
+        $n = count($segmen);
+        $varian = [];
+
+        // 1. Ringkas penuh (tanpa segmen umum)
+        $varian[] = implode(', ', $segmen);
+
+        // 2-5. Geser jendela 2 segmen (dua-duanya paling sering ketemu:
+        // "kelurahan, kota" mis. "Grendeng, Purwokerto")
+        for ($i = 0; $i + 1 < $n && count($varian) < 5; $i++) {
+            $varian[] = $segmen[$i] . ', ' . $segmen[$i + 1];
+        }
+
+        // 6. Segmen pertama saja (nama tempat)
+        if ($n > 1) {
+            $varian[] = $segmen[0];
+        }
+
+        foreach ($varian as $i => $q) {
+            if ($i > 0) {
+                usleep(1100000); // rate limit Nominatim
+            }
+            $res = Http::timeout(10)
+                ->withHeaders(['Accept' => 'application/json'])
+                ->get('https://nominatim.openstreetmap.org/search', [
+                    'format' => 'json',
+                    'limit' => 1,
+                    'countrycodes' => 'id',
+                    'q' => $q,
+                ]);
+            if ($res->ok()) {
+                $data = $res->json();
+                if (! empty($data[0]['lat'])) {
+                    return ['lat' => (float) $data[0]['lat'], 'lng' => (float) $data[0]['lon']];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** Segmen alamat yang terlalu umum (membuat Nominatim gagal). */
+    private function segmenUmum(string $s): bool
+    {
+        // Kode pos murni
+        if (preg_match('/^\d{5}$/', $s)) {
+            return true;
+        }
+        // Indonesia / Jawa Tengah / Central Java / West Java / dsb.
+        if (preg_match('/^(indonesia|jawa( tengah| barat| timur| selatan| utara)?|(central|west|east|north|south) java)$/i', $s)) {
+            return true;
+        }
+        // Mengandung "Regency" / "City" / "Kabupaten" administratif besar
+        if (preg_match('/\b(regency|city|kabupaten)\b/i', $s)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function ekstrakKoordinat(string $teks): ?array
@@ -156,6 +290,56 @@ class DeliveryRouteController extends Controller
         }
 
         return null;
+    }
+
+/** Cek apakah teks cuma host/koordinat sisa, bukan nama tempat. */
+function isGmapsHostOnly(string $teks): bool
+{
+    return (bool) preg_match('/^(maps\.google|www\.google|google\.[a-z.]+|@)/i', $teks);
+}
+
+    /**
+     * Tandai satu pembeli sudah diserahkan dari halaman rute (tombol
+     * "Sampai"). Logika stok sama dengan PenjualanController@fulfill.
+     */
+    public function completeStop(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'id' => 'required|integer|exists:penjualans,id',
+        ]);
+
+        $sale = \App\Models\Penjualan::with('detailPenjualans.produk')->find($validated['id']);
+
+        if ($sale->status_penyerahan === 'sudah_diberikan') {
+            return response()->json(['ok' => true, 'status_penyerahan' => 'sudah_diberikan']);
+        }
+
+        // Validasi stok seperti fulfill()
+        $errors = [];
+        foreach ($sale->detailPenjualans as $detail) {
+            $produk = $detail->produk;
+            if ($produk && $detail->qty > $produk->stok && $sale->status !== 'selesai') {
+                $errors[] = "Stok \"{$produk->nama_produk}\" belum cukup (butuh {$detail->qty}, ada {$produk->stok}). Produksi dulu.";
+            }
+        }
+        if ($errors !== []) {
+            return response()->json(['ok' => false, 'pesan' => $errors[0]], 422);
+        }
+
+        DB::transaction(function () use ($sale) {
+            foreach ($sale->detailPenjualans as $detail) {
+                if ($detail->produk && $sale->status !== 'selesai') {
+                    $detail->produk->decrement('stok', $detail->qty);
+                }
+            }
+            $sale->update([
+                'status' => 'selesai',
+                'status_penyerahan' => 'sudah_diberikan',
+                'tanggal_diberikan' => now(),
+            ]);
+        });
+
+        return response()->json(['ok' => true, 'status_penyerahan' => 'sudah_diberikan']);
     }
 
     /** Titik awal & akhir rute: lokasi dapur dari settings. */

@@ -11,6 +11,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { UserMenuContent } from '@/components/user-menu-content';
+import { MobileMenuSheet } from '@/components/mobile-menu-sheet';
 import { useAppearance } from '@/hooks/use-appearance';
 import { useInitials } from '@/hooks/use-initials';
 import type { BreadcrumbItem as BreadcrumbItemType, User } from '@/types';
@@ -43,9 +44,11 @@ export function AppSidebarHeader({
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
 
-            {/* Mobile Header: App Brand + Active Page Pill */}
+            {/* Mobile Header: Menu button (buka sheet semua menu) + App Brand + Active Page Pill */}
             <div className="flex md:hidden items-center gap-2 min-w-0 flex-1">
-                <SidebarTrigger className="-ml-1 h-8 w-8 shrink-0 rounded-lg" />
+                <div className="md:hidden">
+                    <MobileMenuSheet />
+                </div>
                 <Link
                     href={dashboard()}
                     prefetch
@@ -79,15 +82,14 @@ export function AppSidebarHeader({
                     )}
                 </Button>
 
-                {/* User Dropdown Shortcut - desktop saja; di mobile profil
-                    ada di tab Profil bottom nav */}
+                {/* User Dropdown Shortcut - selalu tampil di kanan atas */}
                 {user && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
                                 aria-label="Menu Pengguna"
-                                className="hidden md:flex items-center gap-1.5 rounded-full p-0.5 hover:ring-2 hover:ring-primary/40 focus:outline-hidden transition-all"
+                                className="flex items-center gap-1.5 rounded-full p-0.5 hover:ring-2 hover:ring-primary/40 focus:outline-hidden transition-all"
                             >
                                 <Avatar className="h-7 w-7 sm:h-8 sm:w-8 border border-border">
                                     <AvatarImage src={user.avatar} alt={user.name} />

@@ -54,6 +54,7 @@ class ProduksiController extends Controller
                     'pr.kode as produk_kode',
                     'pr.nama_produk as nama_produk',
                     'pr.satuan as satuan',
+                    'pr.stok as stok_jadi',
                     DB::raw('SUM(dp.qty) as total_pcs'),
                     DB::raw('COUNT(DISTINCT pj.id) as jumlah_pesanan'),
                 ])
@@ -62,7 +63,10 @@ class ProduksiController extends Controller
                     'produk_kode' => $row->produk_kode,
                     'nama_produk' => $row->nama_produk,
                     'satuan' => $row->satuan,
+                    'stok_jadi' => (int) $row->stok_jadi,
                     'total_pcs' => (int) $row->total_pcs,
+                    // Yang perlu diproduksi = dipesan dikurangi stok yang sudah ada
+                    'perlu_produksi' => max(0, (int) $row->total_pcs - (int) $row->stok_jadi),
                     'jumlah_pesanan' => (int) $row->jumlah_pesanan,
                 ])
                 ->values()

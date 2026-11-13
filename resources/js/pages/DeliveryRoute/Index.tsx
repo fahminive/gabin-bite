@@ -12,12 +12,25 @@ import {
     MapPinned,
     Plus,
     LocateFixed,
+    Play,
+    ArrowUp,
+    ArrowDown,
+    ExternalLink,
+    Square,
+    UserRound,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { LeafletMap } from '@/components/maps/leaflet-map';
 import {
     titikDariAlamat,
@@ -25,6 +38,7 @@ import {
     osrmTripOneWay,
     osrmTripRoundTrip,
     osrmRouteFixed,
+    osrmLegs,
     formatJarak,
     formatDurasi,
     gmapsPerTitik,
@@ -51,10 +65,13 @@ interface Stop {
     latitude: number | null;
     longitude: number | null;
     punya_titik: boolean;
+    status_penyerahan: string;
 }
 
 interface TitikManual {
     id: string;
+    /** id penjualan bila titik ini atas nama pembeli tertentu */
+    stopId?: number;
     nama: string;
     lat: number;
     lng: number;
@@ -66,9 +83,11 @@ interface Props {
 }
 
 interface HasilRute {
-    /** Stop IDs urut kunjungan (termasuk titik manual dgn id "m:xxx") */
+    /** Stop keys urut kunjungan (id penjualan atau id titik manual "m:xxx") */
     urutanKunjungan: string[];
     geometri: Array<[number, number]>;
+    garisPerTitik: Array<Array<[number, number]>>;
+    jarakPerTitik: number[];
     jarak: number;
     durasi: number;
 }
@@ -85,8 +104,12 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
     const [modeSetDapur, setModeSetDapur] = useState(false);
     const [hasil, setHasil] = useState<HasilRute | null>(null);
     const [menghitung, setMenghitung] = useState(false);
-    const [selesaiSampai, setSelesaiSampai] = useState<Set<string>>(new Set());
     const [loadingStops, setLoadingStops] = useState(false);
+    // Mode mulai antar: titik yg sedang dituju (key stop)
+    const [jalankan, setJalankan] = useState(false);
+    const [titikAktifKey, setTitikAktifKey] = useState<string | null>(null);
+    // Preferensi fokus: web atau gmaps saat klik Start
+    const [fokusGmaps, setFokusGmaps] = useState(false);
     const [gpsAktif, setGpsAktif] = useState(false);
     const [posisiSaya, setPosisiSaya] = useState<{
         lat: number;
@@ -129,9 +152,7 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         const titik = await gpsSekarang();
         setSedangSetDapurGps(false);
         if (!titik) {
-            alert(
-                'Gagal mengambil GPS. Izinkan akses lokasi di browser, atau klik peta manual.',
-            );
+            alert('Gagal mengambil GPS. Izinkan akses lokasi di browser, atau klik peta manual.');
             return;
         }
         await simpanDapur(titik.lat, titik.lng);
@@ -145,13 +166,13 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         setLoadingStops(true);
         setHasil(null);
         setTerpilih(new Set());
-        setSelesaiSampai(new Set());
         setTitikManual([]);
+        setJalankan(false);
+        setTitikAktifKey(null);
         fetch(`/delivery-route/batches/${batchId}/stops`)
             .then((res) => res.json())
             .then((data) => {
                 setStops(data.stops);
-                // Auto-check semua yang punya titik
                 setTerpilih(
                     new Set(
                         (data.stops as Stop[])
@@ -174,8 +195,8 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
 
         if (!titik) {
             const petunjuk = isGmapsLink(stop.alamat)
-                ? 'Link Google Maps ini tidak berisi koordinat yang bisa dibaca (link "tempat/place" tanpa pin). Solusi: di gmaps, tap lama pada pin lokasinya lalu "Bagikan" memakai link yang berisi koordinat, ATAU pin manual di peta (tombol "Pin Titik Manual").'
-                : 'Alamat teks tidak ditemukan di peta. Solusi: pin manual di peta (tombol "Pin Titik Manual") atau isi alamat lebih spesifik (nama jalan + kota).';
+                ? 'Link Google Maps ini tidak berisi koordinat yang bisa dibaca. Solusi: pin manual di peta (tombol "Pin Titik Manual").'
+                : 'Alamat teks tidak ditemukan di peta. Solusi: pin manual di peta atau isi alamat lebih spesifik (nama jalan + kota).';
             alert(`Titik tidak ditemukan untuk "${stop.nama}".\n\n${petunjuk}`);
             return;
         }
@@ -194,14 +215,14 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
             }),
         });
 
-        setStops(prev =>
-            prev.map(s =>
+        setStops((prev) =>
+            prev.map((s) =>
                 s.id === stop.id
                     ? { ...s, latitude: titik.lat, longitude: titik.lng, punya_titik: true }
                     : s,
             ),
         );
-        setTerpilih(prev => new Set(prev).add(stop.id));
+        setTerpilih((prev) => new Set(prev).add(stop.id));
     }
 
     /** Estimasi semua stop yang belum punya titik (berurutan, hormati 1 req/detik). */
@@ -222,8 +243,6 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         }
 
         if (modeTitikManual) {
-            // Nama diisi setelahnya via input inline (pendingTitikManual);
-            // langsung tampil pin supaya user bisa lanjut klik titik lain.
             setTitikManual((prev) => [
                 ...prev,
                 {
@@ -235,6 +254,38 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
             ]);
             setModeTitikManual(false);
         }
+    }
+
+    /** Titik manual atas nama pembeli tertentu (alamat ngawur/terbaca salah). */
+    function titikManualUntukStop(stop: Stop) {
+        setModeTitikManual(true);
+        setTitikManual((prev) => {
+            // tandai: titik manual berikutnya atas nama stop ini
+            pendingForStopRef.current = stop;
+            return prev;
+        });
+    }
+    const pendingForStopRef = useRef<Stop | null>(null);
+
+    // Bungkus: setelah klik peta di mode manual, cek pendingForStopRef
+    function onMapClickDenganStop(lat: number, lng: number) {
+        if (modeTitikManual && pendingForStopRef.current) {
+            const stop = pendingForStopRef.current;
+            pendingForStopRef.current = null;
+            setTitikManual((prev) => [
+                ...prev,
+                {
+                    id: `m:${Date.now()}`,
+                    stopId: stop.id,
+                    nama: stop.nama,
+                    lat,
+                    lng,
+                },
+            ]);
+            setModeTitikManual(false);
+            return;
+        }
+        onMapClick(lat, lng);
     }
 
     async function simpanDapur(lat: number, lng: number) {
@@ -251,16 +302,36 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         alert('Lokasi dapur tersimpan.');
     }
 
-    /** Hitung rute optimal via OSRM trip. */
+    /** Key -> koordinat titik (stop atau manual). */
+    function keyToTitik(key: string): LatLng | null {
+        const stop = stops.find((s) => String(s.id) === key);
+        if (stop && stop.punya_titik) {
+            return { lat: stop.latitude!, lng: stop.longitude! };
+        }
+        const manual = titikManual.find((m) => m.id === key);
+        if (manual) {
+            return { lat: manual.lat, lng: manual.lng };
+        }
+        return null;
+    }
+
+    function keyToLabel(key: string): string {
+        const stop = stops.find((s) => String(s.id) === key);
+        if (stop) {
+            return stop.nama;
+        }
+        return titikManual.find((m) => m.id === key)?.nama ?? key;
+    }
+
+    /** Hitung rute optimal via OSRM trip + fallback lokal, plus leg per titik. */
     async function hitungRute() {
         if (!dapur) {
-            alert('Set lokasi dapur dulu: klik "Set Lokasi Dapur" lalu klik peta.');
+            alert('Set lokasi dapur dulu: klik "Set Lokasi Dapur" atau "Dapur dari GPS".');
             return;
         }
 
         const dipilih: Array<{ key: string; titik: LatLng; label: string }> = [];
 
-        // Urutan awal: urutkan berdasarkan id supaya deterministic sebelum OSRM
         stops
             .filter((s) => terpilih.has(s.id) && s.punya_titik)
             .forEach((s) =>
@@ -288,10 +359,10 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                 ...dipilih.map((d) => d.titik),
             ];
 
-            // Urutan visit dari OSRM trip; kalau OSRM down, optimasi lokal
-            // (nearest neighbor + 2-opt) - fitur tetap jalan walau OSRM down.
             let urutanInput: number[] = [];
             let geometri: Array<[number, number]> = [];
+            let garisPerTitik: Array<Array<[number, number]>> = [];
+            let jarakPerTitik: number[] = [];
             let jarak = 0;
             let durasi = 0;
 
@@ -305,46 +376,46 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                 jarak = rute.jarak;
                 durasi = rute.durasi;
             } else {
-                // OSRM trip gagal: coba rute tetap-urutan dgn urutan hasil
-                // optimasi lokal (tetap efisien, geometri tetap jalan aspal)
                 urutanInput = optimasiLokal(
                     { lat: dapur.latitude, lng: dapur.longitude },
                     dipilih.map((d) => d.titik),
                     pulangKeDapur,
                 );
-                const urutanKoordinat = [
-                    koordinat[0],
-                    ...urutanInput.map((i) => dipilih[i].titik),
-                    ...(pulangKeDapur ? [koordinat[0]] : []),
-                ];
-                const r = await osrmRouteFixed(urutanKoordinat);
-                if (r) {
-                    geometri = r.geometri;
-                    jarak = r.jarak;
-                    durasi = r.durasi;
-                }
-            }
-
-            if (!geometri.length) {
-                // OSRM benar-benar down: tetap tampil urutan + jarak
-                // garis-lurus (estimasi), fitur tetap bisa dipakai.
-                let cur: LatLng = { lat: dapur.latitude, lng: dapur.longitude };
+                jarak = 0;
+                const cur: LatLng = { lat: dapur.latitude, lng: dapur.longitude };
                 const semua = [cur, ...urutanInput.map((i) => dipilih[i].titik)];
                 if (pulangKeDapur) {
                     semua.push(cur);
                 }
-                jarak = 0;
                 for (let i = 0; i < semua.length - 1; i++) {
                     jarak += haversine(semua[i], semua[i + 1]);
                 }
-                durasi = Math.round(((jarak / 1000) / 25) * 3600); // asumsi 25 km/jam
+                durasi = Math.round((jarak / 1000 / 25) * 3600);
             }
 
-            // Map urutan input index -> stop key
+            // Urutan final keys
             const urutanKunjungan = urutanInput.map((i) => dipilih[i].key);
+            const urutanKoordinat = [
+                { lat: dapur.latitude, lng: dapur.longitude },
+                ...urutanInput.map((i) => dipilih[i].titik),
+                ...(pulangKeDapur ? [{ lat: dapur.latitude, lng: dapur.longitude }] : []),
+            ];
 
-            setHasil({ urutanKunjungan, geometri, jarak, durasi });
-            setSelesaiSampai(new Set());
+            // Leg per titik + jarak kumulatif utk tampilan per kunjungan
+            const legs = await osrmLegs(urutanKoordinat);
+            if (legs) {
+                garisPerTitik = legs.geometriPerLeg;
+                jarakPerTitik = legs.jarakPerTitik;
+                if (!geometri.length) {
+                    geometri = legs.geometriPerLeg.flat();
+                    jarak = legs.jarak;
+                    durasi = legs.durasi;
+                }
+            }
+
+            setHasil({ urutanKunjungan, geometri, garisPerTitik, jarakPerTitik, jarak, durasi });
+            setTitikAktifKey(null);
+            setJalankan(false);
         } finally {
             setMenghitung(false);
         }
@@ -362,6 +433,172 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                 Math.sin(dLng / 2) ** 2;
         return 2 * R * Math.asin(Math.sqrt(sLat));
     }
+
+    /** Mulai pengantaran: fokus ke titik pertama. */
+    async function mulaiAntar() {
+        if (!hasil || hasil.urutanKunjungan.length === 0) {
+            return;
+        }
+        setJalankan(true);
+        const pertama = hasil.urutanKunjungan.find((k) => !sudahSampai(k));
+        if (!pertama) {
+            return;
+        }
+        setTitikAktifKey(pertama);
+
+        if (fokusGmaps) {
+            const titik = keyToTitik(pertama);
+            if (titik) {
+                window.open(gmapsPerTitik(titik.lat, titik.lng), '_blank');
+            }
+        }
+    }
+
+    function berhentiAntar() {
+        setJalankan(false);
+        setTitikAktifKey(null);
+    }
+
+    /** Fokus peta + optionally buka gmaps utk titik tertentu. */
+    function fokusTitik(key: string) {
+        setTitikAktifKey(key);
+        if (fokusGmaps) {
+            const titik = keyToTitik(key);
+            if (titik) {
+                window.open(gmapsPerTitik(titik.lat, titik.lng), '_blank');
+            }
+        }
+    }
+
+    const [selesaiSampai, setSelesaiSampai] = useState<Set<string>>(new Set());
+    function sudahSampai(key: string): boolean {
+        return selesaiSampai.has(key);
+    }
+
+    /** Tandai sampai: ubah status pembeli jadi sudah_diberikan di backend. */
+    async function tandaiSampai(key: string) {
+        const stop = stops.find((s) => String(s.id) === key);
+        if (stop) {
+            const csrf =
+                document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+            const res = await fetch('/delivery-route/stops/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
+                body: JSON.stringify({ id: stop.id }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; pesan?: string };
+            if (!res.ok || !data.ok) {
+                alert(data.pesan ?? 'Gagal menandai sampai. Coba lagi.');
+                return;
+            }
+            // Hapus dari daftar (sudah diserahkan tidak lagi ditampilkan)
+            setStops((prev) => prev.filter((s) => s.id !== stop.id));
+        }
+
+        setSelesaiSampai((prev) => new Set(prev).add(key));
+
+        // Lanjut otomatis ke titik berikutnya
+        if (hasil) {
+            const sisa = hasil.urutanKunjungan.filter(
+                (k) => k !== key && !selesaiSampai.has(k),
+            );
+            if (sisa.length > 0) {
+                setTitikAktifKey(sisa[0]);
+                if (fokusGmaps) {
+                    const titik = keyToTitik(sisa[0]);
+                    if (titik) {
+                        window.open(gmapsPerTitik(titik.lat, titik.lng), '_blank');
+                    }
+                }
+            } else {
+                setJalankan(false);
+                setTitikAktifKey(null);
+                alert('Semua titik sudah dikunjungi. Rute selesai!');
+            }
+        }
+    }
+
+    /** Geser urutan manual satu posisi. */
+    function geserUrutan(key: string, arah: -1 | 1) {
+        setHasil((prev) => {
+            if (!prev) {
+                return prev;
+            }
+            const urutan = [...prev.urutanKunjungan];
+            const i = urutan.indexOf(key);
+            const j = i + arah;
+            if (i < 0 || j < 0 || j >= urutan.length) {
+                return prev;
+            }
+            [urutan[i], urutan[j]] = [urutan[j], urutan[i]];
+            return { ...prev, urutanKunjungan: urutan };
+        });
+    }
+
+    /** Recalculate garis legs sesuai urutan manual terbaru (via OSRM legs). */
+    async function refreshLegsUrutanBaru() {
+        if (!hasil || !dapur) {
+            return;
+        }
+        const koordinat: LatLng[] = [
+            { lat: dapur.latitude, lng: dapur.longitude },
+            ...(hasil.urutanKunjungan
+                .map((k) => keyToTitik(k))
+                .filter((t): t is LatLng => t !== null)),
+            ...(pulangKeDapur ? [{ lat: dapur.latitude, lng: dapur.longitude }] : []),
+        ];
+        const legs = await osrmLegs(koordinat);
+        if (legs) {
+            setHasil((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          garisPerTitik: legs.geometriPerLeg,
+                          jarakPerTitik: legs.jarakPerTitik,
+                          geometri: legs.geometriPerLeg.flat(),
+                          jarak: legs.jarak,
+                          durasi: legs.durasi,
+                      }
+                    : prev,
+            );
+        }
+    }
+
+    // Saat urutan berubah manual, refresh legs (debounce ringan via effect)
+    useEffect(() => {
+        if (!hasil) {
+            return;
+        }
+        const t = setTimeout(() => {
+            void refreshLegsUrutanBaru();
+        }, 600);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasil?.urutanKunjungan]);
+
+    // Index titik aktif utk peta (leg ke-n)
+    const indexTitikAktif =
+        hasil && titikAktifKey ? hasil.urutanKunjungan.indexOf(titikAktifKey) : null;
+
+    /** Marker utk peta: saat ada hasil urut kunjungan bernomor, saat belum urut nomor urut klik. */
+    const markersUntukPeta = (() => {
+        if (hasil) {
+            const list: Array<{ lat: number; lng: number; label: string; nomor: number }> = [];
+            hasil.urutanKunjungan.forEach((key, i) => {
+                const titik = keyToTitik(key);
+                if (titik) {
+                    list.push({ lat: titik.lat, lng: titik.lng, label: keyToLabel(key), nomor: i + 1 });
+                }
+            });
+            return list;
+        }
+        return [
+            ...stops
+                .filter((s) => terpilih.has(s.id) && s.punya_titik)
+                .map((s) => ({ lat: s.latitude!, lng: s.longitude!, label: s.nama })),
+            ...titikManual.map((m) => ({ lat: m.lat, lng: m.lng, label: m.nama })),
+        ];
+    })();
 
     return (
         <>
@@ -452,33 +689,13 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                     <Card className="lg:col-span-3 rounded-2xl shadow-xs">
                         <CardContent className="p-2.5">
                             <LeafletMap
-                                markers={[
-                                    ...stops
-                                        .filter((s) => terpilih.has(s.id) && s.punya_titik)
-                                        .map((s) => ({
-                                            lat: s.latitude!,
-                                            lng: s.longitude!,
-                                            label: s.nama,
-                                            nomor:
-                                                hasil?.urutanKunjungan.indexOf(String(s.id)) !== -1 &&
-                                                hasil
-                                                    ? hasil.urutanKunjungan.indexOf(String(s.id)) + 1
-                                                    : undefined,
-                                        })),
-                                    ...titikManual.map((m) => ({
-                                        lat: m.lat,
-                                        lng: m.lng,
-                                        label: m.nama,
-                                        nomor:
-                                            hasil && hasil.urutanKunjungan.indexOf(m.id) !== -1
-                                                ? hasil.urutanKunjungan.indexOf(m.id) + 1
-                                                : undefined,
-                                    })),
-                                ]}
+                                markers={markersUntukPeta}
                                 dapur={dapur ? { lat: dapur.latitude, lng: dapur.longitude } : null}
-                                polyline={hasil?.geometri}
+                                polyline={!jalankan ? hasil?.geometri : undefined}
+                                garisPerTitik={hasil?.garisPerTitik}
+                                titikAktif={jalankan ? indexTitikAktif : null}
                                 titikSaya={posisiSaya}
-                                onMapClick={onMapClick}
+                                onMapClick={onMapClickDenganStop}
                                 className="h-[380px] w-full rounded-xl md:h-[520px]"
                             />
                         </CardContent>
@@ -489,71 +706,149 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                         {dapur === null && (
                             <Card className="rounded-2xl border-amber-500/40 bg-amber-500/5 shadow-xs">
                                 <CardContent className="p-3.5 text-xs text-amber-800 dark:text-amber-300">
-                                    Lokasi dapur belum di-set. Klik "Set Lokasi Dapur" lalu klik peta
-                                    di lokasi dapurmu.
+                                    Lokasi dapur belum di-set. Klik "Dapur dari GPS" (berdiri di
+                                    dapur) atau "Set Lokasi Dapur" lalu klik peta.
                                 </CardContent>
                             </Card>
                         )}
 
-                        {/* Ringkasan rute */}
+                        {/* Ringkasan rute + kontrol jalankan */}
                         {hasil && (
                             <Card className="rounded-2xl border-emerald-500/30 bg-emerald-500/5 shadow-xs">
                                 <CardHeader className="p-3.5 pb-1">
-                                    <CardTitle className="flex items-center gap-1.5 text-sm font-bold">
-                                        <Navigation className="h-4 w-4 text-emerald-600" />
-                                        Rute Optimal
-                                        {pulangKeDapur && ' (pulang ke dapur)'}
+                                    <CardTitle className="flex items-center justify-between gap-2 text-sm font-bold">
+                                        <span className="flex items-center gap-1.5">
+                                            <Navigation className="h-4 w-4 text-emerald-600" />
+                                            Rute {jalankan ? '(berjalan)' : ''}
+                                        </span>
+                                        <span className="text-xs font-semibold">
+                                            {formatJarak(hasil.jarak)} - {formatDurasi(hasil.durasi)}
+                                        </span>
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-3.5 pt-0">
-                                    <p className="text-sm font-bold">
-                                        {formatJarak(hasil.jarak)} - {formatDurasi(hasil.durasi)}
-                                    </p>
-                                    <ol className="mt-2 space-y-1.5">
+                                    {/* Mulai / berhenti + preferensi fokus */}
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        {!jalankan ? (
+                                            <Button
+                                                size="sm"
+                                                className="h-8 rounded-xl text-xs font-bold"
+                                                onClick={mulaiAntar}
+                                            >
+                                                <Play className="mr-1 h-3.5 w-3.5" />
+                                                Start Antar
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-8 rounded-xl text-xs font-bold"
+                                                onClick={berhentiAntar}
+                                            >
+                                                <Square className="mr-1 h-3.5 w-3.5" />
+                                                Berhenti
+                                            </Button>
+                                        )}
+                                        <Select
+                                            value={fokusGmaps ? 'gmaps' : 'web'}
+                                            onValueChange={(v) => setFokusGmaps(v === 'gmaps')}
+                                        >
+                                            <SelectTrigger className="h-8 w-[170px] text-[11px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="web">Fokus di web ini</SelectItem>
+                                                <SelectItem value="gmaps">
+                                                    Fokus via Google Maps
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <ol className="space-y-1.5">
                                         {hasil.urutanKunjungan.map((key, i) => {
-                                            const stop = stops.find((s) => String(s.id) === key);
+                                            const label = keyToLabel(key);
+                                            const sudah = sudahSampai(key);
+                                            const aktif = titikAktifKey === key;
+                                            const titik = keyToTitik(key);
+                                            const jarakLeg =
+                                                hasil.jarakPerTitik[i] !== undefined
+                                                    ? formatJarak(hasil.jarakPerTitik[i])
+                                                    : null;
                                             const manual = titikManual.find((m) => m.id === key);
-                                            const label = stop?.nama ?? manual?.nama ?? key;
-                                            const sudah = selesaiSampai.has(key);
                                             return (
                                                 <li
                                                     key={key}
-                                                    className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs ${sudah ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-muted/40'}`}
+                                                    className={`rounded-lg px-2 py-1.5 text-xs ${aktif ? 'bg-primary/10 ring-1 ring-primary/40' : sudah ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-muted/40'}`}
                                                 >
-                                                    <span className="flex min-w-0 items-center gap-1.5">
-                                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                                                            {i + 1}
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="flex min-w-0 items-center gap-1.5">
+                                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                                                                {i + 1}
+                                                            </span>
+                                                            <span className="truncate font-semibold">
+                                                                {label}
+                                                            </span>
+                                                            {manual?.stopId != null && (
+                                                                <UserRound className="h-3 w-3 shrink-0 text-primary" />
+                                                            )}
+                                                            {jarakLeg && (
+                                                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                                                    {jarakLeg}
+                                                                </span>
+                                                            )}
                                                         </span>
-                                                        <span className="truncate font-semibold">{label}</span>
-                                                    </span>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className={`h-7 shrink-0 rounded-full px-2 text-[10px] font-bold ${sudah ? 'text-emerald-600' : ''}`}
-                                                        onClick={() =>
-                                                            setSelesaiSampai((prev) => {
-                                                                const next = new Set(prev);
-                                                                if (next.has(key)) {
-                                                                    next.delete(key);
-                                                                } else {
-                                                                    next.add(key);
-                                                                }
-                                                                return next;
-                                                            })
-                                                        }
-                                                    >
+                                                        <span className="flex shrink-0 items-center gap-0.5">
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Naikkan urutan"
+                                                                className="rounded p-1 hover:bg-muted"
+                                                                onClick={() => geserUrutan(key, -1)}
+                                                            >
+                                                                <ArrowUp className="h-3 w-3" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Turunkan urutan"
+                                                                className="rounded p-1 hover:bg-muted"
+                                                                onClick={() => geserUrutan(key, 1)}
+                                                            >
+                                                                <ArrowDown className="h-3 w-3" />
+                                                            </button>
+                                                            {!sudah && titik && (
+                                                                <a
+                                                                    href={gmapsPerTitik(
+                                                                        titik.lat,
+                                                                        titik.lng,
+                                                                    )}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="rounded p-1 text-primary hover:bg-muted"
+                                                                    aria-label="Buka di gmaps"
+                                                                >
+                                                                    <ExternalLink className="h-3 w-3" />
+                                                                </a>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-1 flex justify-end">
                                                         {sudah ? (
-                                                            <>
-                                                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                                            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                                                                <CheckCircle2 className="h-3 w-3" />
                                                                 Sampai
-                                                            </>
+                                                            </span>
                                                         ) : (
-                                                            <>
+                                                            <Button
+                                                                variant={aktif ? 'default' : 'ghost'}
+                                                                size="sm"
+                                                                className="h-7 rounded-full px-2.5 text-[10px] font-bold"
+                                                                onClick={() => tandaiSampai(key)}
+                                                            >
                                                                 <Circle className="mr-1 h-3 w-3" />
                                                                 Tandai Sampai
-                                                            </>
+                                                            </Button>
                                                         )}
-                                                    </Button>
+                                                    </div>
                                                 </li>
                                             );
                                         })}
@@ -640,20 +935,31 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                                                                 ada titik
                                                             </Badge>
                                                         ) : (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-7 rounded-full px-2 text-[10px] font-bold"
-                                                                disabled={geocodeTarget === stop.id || !stop.alamat}
-                                                                onClick={() => estimasiTitik(stop)}
-                                                            >
-                                                                {geocodeTarget === stop.id ? (
-                                                                    <LoaderCircle className="mr-1 h-3 w-3 animate-spin" />
-                                                                ) : (
-                                                                    <Search className="mr-1 h-3 w-3" />
-                                                                )}
-                                                                Estimasi
-                                                            </Button>
+                                                            <div className="flex gap-1">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="h-7 rounded-full px-2 text-[10px] font-bold"
+                                                                    disabled={geocodeTarget === stop.id || !stop.alamat}
+                                                                    onClick={() => estimasiTitik(stop)}
+                                                                >
+                                                                    {geocodeTarget === stop.id ? (
+                                                                        <LoaderCircle className="mr-1 h-3 w-3 animate-spin" />
+                                                                    ) : (
+                                                                        <Search className="mr-1 h-3 w-3" />
+                                                                    )}
+                                                                    Estimasi
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="h-7 rounded-full px-2 text-[10px] font-bold"
+                                                                    onClick={() => titikManualUntukStop(stop)}
+                                                                >
+                                                                    <MapPinned className="mr-1 h-3 w-3" />
+                                                                    Pin
+                                                                </Button>
+                                                            </div>
                                                         )}
                                                         {stop.latitude !== null && stop.longitude !== null && (
                                                             <a
@@ -675,12 +981,17 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                                 {titikManual.length > 0 && (
                                     <div className="mt-2 rounded-xl border border-border/70 bg-muted/30 p-2.5">
                                         <p className="mb-1.5 text-[10px] font-bold text-muted-foreground">
-                                            Titik manual ({titikManual.length}) - edit nama lalu keluar input
+                                            Titik manual ({titikManual.length}) - bisa atas nama
+                                            pembeli (ikon orang) atau nama sendiri
                                         </p>
                                         <div className="flex flex-col gap-1.5">
                                             {titikManual.map((m) => (
                                                 <div key={m.id} className="flex items-center gap-1.5">
-                                                    <MapPinned className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                                    {m.stopId != null ? (
+                                                        <UserRound className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                                    ) : (
+                                                        <MapPinned className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                                    )}
                                                     <Input
                                                         value={m.nama}
                                                         onChange={(e) =>
@@ -720,8 +1031,3 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         </>
     );
 }
-
-/**
- * Urutan kunjungan dihitung dari hasil OSRM trip (urutanInputKunjungan)
- * atau fallback optimasiLokal; tidak perlu fungsi terpisah lagi.
- */

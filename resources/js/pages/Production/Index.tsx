@@ -34,7 +34,9 @@ interface ProductionNeed {
     produk_kode: string | null;
     nama_produk: string;
     satuan: string | null;
+    stok_jadi: number;
     total_pcs: number;
+    perlu_produksi: number;
     jumlah_pesanan: number;
 }
 
@@ -161,9 +163,20 @@ export default function ProductionIndex({ productions, metrics, productionNeeds,
                                         <span className="text-xs text-muted-foreground whitespace-nowrap">
                                             {need.jumlah_pesanan} pesanan
                                         </span>
-                                        <Badge variant="secondary" className="shrink-0 text-xs font-bold">
-                                            {need.total_pcs} {need.satuan ?? 'pcs'}
-                                        </Badge>
+                                        <span className="flex shrink-0 items-center gap-1.5">
+                                            <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
+                                                stok {need.stok_jadi} {need.satuan ?? 'pcs'}
+                                            </Badge>
+                                            {need.perlu_produksi > 0 ? (
+                                                <Badge variant="secondary" className="text-xs font-bold">
+                                                    buat {need.perlu_produksi} {need.satuan ?? 'pcs'}
+                                                </Badge>
+                                            ) : (
+                                                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                                                    stok cukup
+                                                </Badge>
+                                            )}
+                                        </span>
                                     </div>
                                 ))}
                             </div>

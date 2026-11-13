@@ -37,6 +37,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('delivery-route', [DeliveryRouteController::class, 'index'])->name('delivery-route.index');
     Route::get('delivery-route/batches/{batch}/stops', [DeliveryRouteController::class, 'batchStops'])->name('delivery-route.stops');
     Route::post('delivery-route/stops/point', [DeliveryRouteController::class, 'setStopPoint'])->name('delivery-route.set-point');
+    Route::post('delivery-route/stops/complete', [DeliveryRouteController::class, 'completeStop'])->name('delivery-route.complete-stop');
     Route::post('delivery-route/resolve-gmaps', [DeliveryRouteController::class, 'resolveGmaps'])->name('delivery-route.resolve-gmaps');
     Route::post('delivery-route/dapur', [DeliveryRouteController::class, 'setDapur'])->name('delivery-route.set-dapur');
 
