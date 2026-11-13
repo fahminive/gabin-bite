@@ -16,11 +16,19 @@ interface LeafletMapProps {
     garisPerTitik?: Array<Array<[number, number]>>;
     /** Index leg yang sedang dituju (0-based dari stop; undefined = semua) */
     titikAktif?: number | null;
+    /**
+     * Mode GPS: garis tiap leg DIGAN Potong dari titik terjauh yang sudah
+     * dilewati GPS (index leg pertama yang belum dilewati; leg sebelum itu
+     * dihapus karena GPS sudah menginjaknya).
+     */
+    potongGarisSampai?: number | null;
     /** Posisi GPS kurir saat ini (titik biru + lingkaran akurasi) */
     titikSaya?: { lat: number; lng: number; akurasi?: number } | null;
     /** Klik peta (untuk pin titik manual / set dapur) */
     onMapClick?: (lat: number, lng: number) => void;
     className?: string;
+    /** Tinggi peta bisa diganti runtime (tombol expand di halaman) */
+    tinggiClass?: string;
 }
 
 const ikonDapur = () =>
@@ -61,9 +69,11 @@ export function LeafletMap({
     polyline,
     garisPerTitik,
     titikAktif,
+    potongGarisSampai,
     titikSaya,
     onMapClick,
     className = 'h-[420px] w-full',
+    tinggiClass,
 }: LeafletMapProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<L.Map | null>(null);
@@ -168,6 +178,7 @@ export function LeafletMap({
     const polylineKey = JSON.stringify(polyline ?? []);
     const garisKey = JSON.stringify(garisPerTitik ?? []);
     const aktifKey = titikAktif === null || titikAktif === undefined ? 'all' : String(titikAktif);
+    const potonganKey = potongGarisSampai === null || potongGarisSampai === undefined ? 'none' : String(potongGarisSampai);
     const garisLayersRef = useRef<L.Polyline[]>([]);
     const garisKeyRef = useRef('');
     const aktifKeyRef = useRef('all');
@@ -243,6 +254,10 @@ export function LeafletMap({
                 return;
             }
             const aktif = titikAktif === null || titikAktif === undefined || titikAktif === i;
+            // Mode GPS: leg yang sudah dilewati GPS (index < potongan) dihapus
+            if (potongGarisSampai !== null && potongGarisSampai !== undefined && i < potongGarisSampai) {
+                return;
+            }
             const layer = L.polyline(leg, {
                 color: aktif ? '#E94F87' : '#23150f',
                 weight: aktif ? 6 : 3.5,
@@ -252,7 +267,18 @@ export function LeafletMap({
             garisLayersRef.current.push(layer);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [garisKey, aktifKey]);
+    }, [garisKey, aktifKey, potonganKey]);
 
-    return <div ref={containerRef} className={className} />;
+    // Invalidate ukuran peta saat tinggi berubah (expand/shrink)
+    const tinggi = tinggiClass ?? '';
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) {
+            return;
+        }
+        const t = setTimeout(() => map.invalidateSize(), 250);
+        return () => clearTimeout(t);
+    }, [tinggi]);
+
+    return <div ref={containerRef} className={tinggiClass ?? className} />;
 }

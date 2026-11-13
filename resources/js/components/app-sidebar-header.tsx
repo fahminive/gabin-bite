@@ -44,11 +44,8 @@ export function AppSidebarHeader({
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
 
-            {/* Mobile Header: Menu button (buka sheet semua menu) + App Brand + Active Page Pill */}
+            {/* Mobile Header: App Brand + Active Page Pill */}
             <div className="flex md:hidden items-center gap-2 min-w-0 flex-1">
-                <div className="md:hidden">
-                    <MobileMenuSheet />
-                </div>
                 <Link
                     href={dashboard()}
                     prefetch
@@ -82,14 +79,19 @@ export function AppSidebarHeader({
                     )}
                 </Button>
 
-                {/* User Dropdown Shortcut - selalu tampil di kanan atas */}
+                {/* Mobile: tombol menu semua-menu (pengganti icon profil) */}
+                <div className="md:hidden">
+                    <MobileMenuSheet />
+                </div>
+
+                {/* User Dropdown Shortcut - desktop saja */}
                 {user && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
                                 aria-label="Menu Pengguna"
-                                className="flex items-center gap-1.5 rounded-full p-0.5 hover:ring-2 hover:ring-primary/40 focus:outline-hidden transition-all"
+                                className="hidden md:flex items-center gap-1.5 rounded-full p-0.5 hover:ring-2 hover:ring-primary/40 focus:outline-hidden transition-all"
                             >
                                 <Avatar className="h-7 w-7 sm:h-8 sm:w-8 border border-border">
                                     <AvatarImage src={user.avatar} alt={user.name} />

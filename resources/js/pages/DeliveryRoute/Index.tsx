@@ -45,6 +45,9 @@ import {
     gpsSekarang,
     gpsWatch,
     isGmapsLink,
+    simpanRute,
+    muatRute,
+    hapusRute,
     type GpsWatcher,
     type LatLng,
 } from '@/lib/route-utils';
@@ -110,6 +113,10 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
     const [titikAktifKey, setTitikAktifKey] = useState<string | null>(null);
     // Preferensi fokus: web atau gmaps saat klik Start
     const [fokusGmaps, setFokusGmaps] = useState(false);
+    // Mode start: 'gps' = start dari posisi GPS realtime (rute terpotong
+    // sepanjang GPS menginjak), 'dapur' = start statis dari dapur (rute
+    // hilang per titik saat ditandai sampai)
+    const [modeStart, setModeStart] = useState<'gps' | 'dapur'>('dapur');
     const [gpsAktif, setGpsAktif] = useState(false);
     const [posisiSaya, setPosisiSaya] = useState<{
         lat: number;
@@ -117,7 +124,52 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         akurasi?: number;
     } | null>(null);
     const [sedangSetDapurGps, setSedangSetDapurGps] = useState(false);
+    // Tinggi peta: normal / setengah layar / penuh
+    const [ukuranPeta, setUkuranPeta] = useState<0 | 1 | 2>(0);
+    const [selesaiSampai, setSelesaiSampai] = useState<Set<string>>(new Set());
     const watcherRef = useRef<GpsWatcher | null>(null);
+
+    // ===== Muat rute tersimpan (tahan bolak-balik aplikasi) =====
+    const [ruteDimuat, setRuteDimuat] = useState(false);
+    useEffect(() => {
+        const simpanan = muatRute();
+        if (simpanan && simpanan.batchId === batchId) {
+            setHasil({
+                urutanKunjungan: simpanan.urutanKunjungan,
+                geometri: [],
+                garisPerTitik: [],
+                jarakPerTitik: [],
+                jarak: simpanan.jarak,
+                durasi: simpanan.durasi,
+            });
+            setSelesaiSampai(new Set(simpanan.sudahSampai));
+            setTitikAktifKey(simpanan.titikAktifKey);
+            setJalankan(simpanan.titikAktifKey !== null);
+            setModeStart(simpanan.modeStart);
+            // refreshLegs effect akan menggambar ulang garis via OSRM
+            setRuteDimuat(true);
+        } else if (simpanan && simpanan.batchId !== batchId) {
+            hapusRute();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ===== Simpan rute tiap berubah =====
+    useEffect(() => {
+        if (!hasil || !batchId) {
+            return;
+        }
+        simpanRute({
+            batchId,
+            urutanKunjungan: hasil.urutanKunjungan,
+            jarak: hasil.jarak,
+            durasi: hasil.durasi,
+            titikAktifKey,
+            modeStart,
+            sudahSampai: [...selesaiSampai],
+            disimpanPada: Date.now(),
+        });
+    }, [hasil, batchId, titikAktifKey, modeStart, selesaiSampai]);
 
     // Matikan GPS watch saat halaman ditutup
     useEffect(() => {
@@ -439,6 +491,19 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         if (!hasil || hasil.urutanKunjungan.length === 0) {
             return;
         }
+
+        // Mode GPS butuh GPS aktif
+        if (modeStart === 'gps' && !gpsAktif) {
+            const langsung = await gpsSekarang();
+            if (!langsung) {
+                alert(
+                    'Mode GPS butuh akses lokasi. Nyalakan "GPS Saya" dulu, atau pakai Mode Dapur.',
+                );
+                return;
+            }
+            setPosisiSaya({ ...langsung });
+        }
+
         setJalankan(true);
         const pertama = hasil.urutanKunjungan.find((k) => !sudahSampai(k));
         if (!pertama) {
@@ -470,7 +535,6 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         }
     }
 
-    const [selesaiSampai, setSelesaiSampai] = useState<Set<string>>(new Set());
     function sudahSampai(key: string): boolean {
         return selesaiSampai.has(key);
     }
@@ -564,21 +628,58 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
         }
     }
 
-    // Saat urutan berubah manual, refresh legs (debounce ringan via effect)
+    // Saat urutan berubah manual ATAU rute dimuat dari localStorage (garis
+    // kosong), refresh legs (debounce ringan via effect)
     useEffect(() => {
         if (!hasil) {
             return;
         }
+        // Rute tersimpan punya garis kosong; wajib refresh utk menggambar
+        const perluGaris = hasil.garisPerTitik.length === 0;
+        if (!perluGaris && !ruteDimuat) {
+            // urutan berubah saja -> refresh utk garis terbaru
+        }
         const t = setTimeout(() => {
             void refreshLegsUrutanBaru();
-        }, 600);
+        }, perluGaris ? 300 : 600);
         return () => clearTimeout(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hasil?.urutanKunjungan]);
+    }, [hasil?.urutanKunjungan, ruteDimuat]);
 
     // Index titik aktif utk peta (leg ke-n)
     const indexTitikAktif =
         hasil && titikAktifKey ? hasil.urutanKunjungan.indexOf(titikAktifKey) : null;
+
+    /**
+     * Mode GPS: hitung leg mana yang sudah "menginjak" posisi GPS (jarak
+     * GPS ke salah satu ujung leg < 50m) - leg itu dan sebelumnya dihapus
+     * dari garis, layaknya rute gmaps yang berkurang saat dikendarai.
+     */
+    const potonganGaris = (() => {
+        if (modeStart !== 'gps' || !jalankan || !posisiSaya || !hasil?.garisPerTitik.length) {
+            return null;
+        }
+        const dekat = (leg: Array<[number, number]>) => {
+            const ujungA = leg[0];
+            const ujungB = leg[leg.length - 1];
+            const dA = haversine(
+                posisiSaya,
+                { lat: ujungA[0], lng: ujungA[1] },
+            );
+            const dB = haversine(
+                posisiSaya,
+                { lat: ujungB[0], lng: ujungB[1] },
+            );
+            return Math.min(dA, dB) < 50;
+        };
+        // Leg pertama yang BELUM dilewati = batas potongan
+        for (let i = 0; i < hasil.garisPerTitik.length; i++) {
+            if (!dekat(hasil.garisPerTitik[i])) {
+                return i;
+            }
+        }
+        return hasil.garisPerTitik.length;
+    })();
 
     /** Marker utk peta: saat ada hasil urut kunjungan bernomor, saat belum urut nomor urut klik. */
     const markersUntukPeta = (() => {
@@ -688,15 +789,40 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                     {/* Peta */}
                     <Card className="lg:col-span-3 rounded-2xl shadow-xs">
                         <CardContent className="p-2.5">
+                            {/* Kontrol ukuran peta */}
+                            <div className="mb-2 flex items-center justify-end gap-1">
+                                {([
+                                    { mode: 0 as const, label: 'Kecil' },
+                                    { mode: 1 as const, label: '50%' },
+                                    { mode: 2 as const, label: 'Layar' },
+                                ]).map(({ mode, label }) => (
+                                    <Button
+                                        key={mode}
+                                        variant={ukuranPeta === mode ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="h-7 rounded-full px-2.5 text-[10px] font-bold"
+                                        onClick={() => setUkuranPeta(mode)}
+                                    >
+                                        {label}
+                                    </Button>
+                                ))}
+                            </div>
                             <LeafletMap
                                 markers={markersUntukPeta}
                                 dapur={dapur ? { lat: dapur.latitude, lng: dapur.longitude } : null}
                                 polyline={!jalankan ? hasil?.geometri : undefined}
                                 garisPerTitik={hasil?.garisPerTitik}
                                 titikAktif={jalankan ? indexTitikAktif : null}
+                                potongGarisSampai={potonganGaris}
                                 titikSaya={posisiSaya}
                                 onMapClick={onMapClickDenganStop}
-                                className="h-[380px] w-full rounded-xl md:h-[520px]"
+                                tinggiClass={
+                                    ukuranPeta === 0
+                                        ? 'h-[380px] w-full rounded-xl md:h-[520px]'
+                                        : ukuranPeta === 1
+                                          ? 'h-[50vh] w-full rounded-xl'
+                                          : 'h-[92vh] w-full rounded-xl'
+                                }
                             />
                         </CardContent>
                     </Card>
@@ -750,6 +876,18 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                                             </Button>
                                         )}
                                         <Select
+                                            value={modeStart}
+                                            onValueChange={(v) => setModeStart(v as 'gps' | 'dapur')}
+                                        >
+                                            <SelectTrigger className="h-8 w-[130px] text-[11px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="dapur">Mode Dapur</SelectItem>
+                                                <SelectItem value="gps">Mode GPS</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Select
                                             value={fokusGmaps ? 'gmaps' : 'web'}
                                             onValueChange={(v) => setFokusGmaps(v === 'gmaps')}
                                         >
@@ -764,6 +902,12 @@ export default function DeliveryRouteIndex({ batches, dapur: dapurProp }: Props)
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                    {jalankan && modeStart === 'gps' && (
+                                        <p className="mb-2 text-[10px] font-semibold text-muted-foreground">
+                                            Mode GPS: rute terpotong otomatis sepanjang GPS
+                                            menginjaknya. Nyalakan "GPS Saya" bila belum.
+                                        </p>
+                                    )}
 
                                     <ol className="space-y-1.5">
                                         {hasil.urutanKunjungan.map((key, i) => {

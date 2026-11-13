@@ -404,7 +404,10 @@ export const isGmapsLink = (teks: string) =>
 export async function titikDariAlamat(alamat: string): Promise<LatLng | null> {
     const teks = alamat.trim();
 
-    // 1. Koordinat eksplisit di dalam link/teks: @-6.18,106.83 / q=-6.18,106.83 / !3d-6.18!4d106.83
+    // 1. Koordinat EKSPLISIT di teks: hanya pola spesifik gmaps (@lat,lng /
+    //    !3d!4d / q= / destination= / ll=) ATAU teks yang benar-benar hanya
+    //    "lat,lng". Link TIDAK PERNAH difallback regex bebas - itu penyebab
+    //    titik "ke China" (angka jebakan di HTML/URL Google).
     const koordinat = ekstrakKoordinat(teks);
     if (koordinat) {
         return koordinat;
@@ -468,8 +471,10 @@ export function ekstrakKoordinat(teks: string): LatLng | null {
     if (m) {
         return cekKoordinat(m[1], m[2]);
     }
-    // Teks berisi dua angka desimal yang menyerupai koordinat
-    m = teks.match(/(-?\d{1,2}\.\d{4,})[,\s]+(-?\d{1,3}\.\d{4,})/);
+    // Teks berisi dua angka desimal menyerupai koordinat - HANYA untuk teks
+    // alamat biasa, JANGAN untuk link (Google Docs/HTML penuh angka jebakan;
+    // ini penyebab titik "ke China" dulu). Filter dipanggil dgn flag.
+    m = teks.match(/^-?\s*(-?\d{1,2}\.\d{4,})\s*[,\s]\s*(-?\d{1,3}\.\d{4,})$/);
     if (m) {
         return cekKoordinat(m[1], m[2]);
     }
@@ -542,4 +547,57 @@ export function gpsWatch(onUpdate: (titik: LatLng, akurasi: number) => void): Gp
         stop: () => navigator.geolocation.clearWatch(id),
         titik: () => terakhir,
     };
+}
+
+/**
+ * Penyimpanan rute di localStorage: rute tidak hilang saat user bolak-balik
+ * pindah aplikasi (gmaps) dan kembali ke web.
+ */
+const RUTE_KEY = 'gabin-rute-aktif';
+
+export interface RuteTersimpan {
+    batchId: string;
+    urutanKunjungan: string[];
+    jarak: number;
+    durasi: number;
+    /** key titik aktif saat ini */
+    titikAktifKey: string | null;
+    /** mode start: gps atau dapur */
+    modeStart: 'gps' | 'dapur';
+    sudahSampai: string[];
+    disimpanPada: number;
+}
+
+export function simpanRute(data: RuteTersimpan) {
+    try {
+        localStorage.setItem(RUTE_KEY, JSON.stringify(data));
+    } catch {
+        /* storage penuh/di-blok: abaikan */
+    }
+}
+
+export function muatRute(): RuteTersimpan | null {
+    try {
+        const raw = localStorage.getItem(RUTE_KEY);
+        if (!raw) {
+            return null;
+        }
+        const data = JSON.parse(raw) as RuteTersimpan;
+        // Kadaluarsa 24 jam
+        if (Date.now() - data.disimpanPada > 24 * 3600 * 1000) {
+            localStorage.removeItem(RUTE_KEY);
+            return null;
+        }
+        return data;
+    } catch {
+        return null;
+    }
+}
+
+export function hapusRute() {
+    try {
+        localStorage.removeItem(RUTE_KEY);
+    } catch {
+        /* abaikan */
+    }
 }
