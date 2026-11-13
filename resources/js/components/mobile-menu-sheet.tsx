@@ -28,7 +28,6 @@ import {
     DrawerTitle,
     DrawerTrigger,
 } from '@/components/ui/drawer';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import * as materials from '@/actions/App/Http/Controllers/BahanBakuController';
@@ -138,11 +137,15 @@ export function MobileMenuSheet() {
     return (
         <Drawer open={terbuka} onOpenChange={setTerbuka}>
             <DrawerTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Buka menu">
-                    <LayoutGrid className="h-5 w-5" />
-                </Button>
+                <button
+                    type="button"
+                    aria-label="Buka menu"
+                    className="flex h-13 w-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/40 ring-4 ring-background transition-transform active:scale-90"
+                >
+                    <LayoutGrid className="h-6 w-6" strokeWidth={2.25} />
+                </button>
             </DrawerTrigger>
-            <DrawerContent className="h-[70vh] max-h-[96vh] rounded-t-3xl bg-sidebar text-sidebar-foreground select-none">
+            <DrawerContent className="h-[70vh] max-h-[96vh] rounded-t-3xl border border-white/30 bg-white/50 text-foreground backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/50 dark:text-sidebar-foreground select-none">
                 <div className="flex h-full flex-col">
                     <DrawerHeader className="shrink-0 px-4 pt-1 pb-2">
                         <DrawerTitle className="text-center text-sm font-bold tracking-wide text-sidebar-foreground/80">
@@ -152,7 +155,7 @@ export function MobileMenuSheet() {
                     <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-8 pt-1">
                         {grup.map((g) => (
                             <div key={g.label} className="mb-4">
-                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/50">
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-foreground/50 dark:text-sidebar-foreground/50">
                                     {g.label}
                                 </p>
                                 <div className="grid grid-cols-4 gap-2">

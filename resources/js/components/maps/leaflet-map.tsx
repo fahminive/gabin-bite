@@ -269,15 +269,22 @@ export function LeafletMap({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [garisKey, aktifKey, potonganKey]);
 
-    // Invalidate ukuran peta saat tinggi berubah (expand/shrink)
+    // Invalidate ukuran peta saat tinggi berubah (expand/shrink).
+    // Beberapa kali + di frame berbeda: transisi layout bisa membuat Leaflet
+    // menghitung ukuran lama -> tile tidak dirender (peta putih/abu).
     const tinggi = tinggiClass ?? '';
     useEffect(() => {
         const map = mapRef.current;
         if (!map) {
             return;
         }
-        const t = setTimeout(() => map.invalidateSize(), 250);
-        return () => clearTimeout(t);
+        map.invalidateSize({ animate: false });
+        const t1 = setTimeout(() => map.invalidateSize({ animate: false }), 150);
+        const t2 = setTimeout(() => map.invalidateSize({ animate: false }), 500);
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+        };
     }, [tinggi]);
 
     return <div ref={containerRef} className={tinggiClass ?? className} />;

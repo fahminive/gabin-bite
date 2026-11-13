@@ -1,10 +1,11 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutDashboard, ClipboardList, CookingPot, UserRound } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, CookingPot, UserRound, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import * as sales from '@/actions/App/Http/Controllers/PenjualanController';
 import * as productions from '@/actions/App/Http/Controllers/ProduksiController';
 import { edit } from '@/routes/profile';
+import { MobileMenuSheet } from '@/components/mobile-menu-sheet';
 
 export function MobileBottomNav() {
     const { url } = usePage();
@@ -19,7 +20,7 @@ export function MobileBottomNav() {
         return url.startsWith(path);
     };
 
-    const navItems = [
+    const navKiri = [
         {
             title: 'Beranda',
             href: dashboard(),
@@ -32,6 +33,9 @@ export function MobileBottomNav() {
             icon: ClipboardList,
             active: isCurrent('/sales'),
         },
+    ];
+
+    const navKanan = [
         {
             title: 'Produksi',
             href: productions.index().url,
@@ -49,43 +53,65 @@ export function MobileBottomNav() {
     return (
         <nav
             aria-label="Navigasi Bawah Smartphone"
-            className="fixed bottom-0 left-0 right-0 z-40 block md:hidden bg-card/95 backdrop-blur-xl border-t border-border/80 shadow-[0_-8px_24px_rgba(59,36,24,0.08)] pb-safe transition-transform duration-300 print:hidden"
+            className="fixed bottom-0 left-0 right-0 z-40 block md:hidden print:hidden"
         >
-            <div className="flex h-16 items-center justify-around px-2">
-                {navItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                        <Link
-                            key={item.title}
-                            href={item.href}
-                            prefetch
-                            className={cn(
-                                'relative flex flex-1 flex-col items-center justify-center py-1 transition-all duration-200 active:scale-95 touch-manipulation',
-                                item.active
-                                    ? 'text-primary font-bold'
-                                    : 'text-muted-foreground hover:text-foreground font-medium',
-                            )}
-                        >
-                            <div
-                                className={cn(
-                                    'flex h-8 w-12 items-center justify-center rounded-full transition-all duration-200',
-                                    item.active
-                                        ? 'bg-primary/15 text-primary scale-110 shadow-xs ring-1 ring-primary/20'
-                                        : 'hover:bg-muted/40',
-                                )}
-                            >
-                                <Icon className="h-5 w-5" strokeWidth={item.active ? 2.5 : 2} />
-                            </div>
-                            <span className="mt-0.5 text-[10px] tracking-tight truncate max-w-[72px]">
-                                {item.title}
-                            </span>
-                            {item.active && (
-                                <span className="absolute -top-1 h-1 w-5 rounded-full bg-primary" />
-                            )}
-                        </Link>
-                    );
-                })}
+            {/* Cekungan kiri-kanan ala BNB-45: dua pill mengapit tombol tengah */}
+            <div className="relative mx-3 mb-3 flex items-end justify-between">
+                {/* Kiri: 2 menu */}
+                <div className="flex flex-1 items-start justify-around rounded-3xl border border-white/40 bg-white/50 shadow-lg shadow-black/10 backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/50">
+                    {navKiri.map((item) => (
+                        <NavItem key={item.title} item={item} />
+                    ))}
+                    {/* Slot kosong agar simetris dgn kanan (2 kolom per sisi) */}
+                    <span className="w-[68px]" aria-hidden />
+                </div>
+
+                {/* Tengah: tombol menu menonjol */}
+                <div className="relative z-10 -mx-6 flex w-18 shrink-0 justify-center">
+                    <div className="absolute -top-7 h-16 w-16 rounded-full border border-white/40 bg-white/50 shadow-lg shadow-black/10 backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/50" />
+                    <div className="absolute -top-7 flex h-16 w-16 items-center justify-center">
+                        <MobileMenuSheet />
+                    </div>
+                </div>
+
+                {/* Kanan: 2 menu */}
+                <div className="flex flex-1 items-start justify-around rounded-3xl border border-white/40 bg-white/50 shadow-lg shadow-black/10 backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/50">
+                    <span className="w-[68px]" aria-hidden />
+                    {navKanan.map((item) => (
+                        <NavItem key={item.title} item={item} />
+                    ))}
+                </div>
             </div>
         </nav>
+    );
+}
+
+function NavItem({
+    item,
+}: {
+    item: {
+        title: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        href: any;
+        icon: typeof LayoutDashboard;
+        active: boolean;
+    };
+}) {
+    const Icon = item.icon;
+    return (
+        <Link
+            href={item.href}
+            prefetch
+            className={cn(
+                'relative flex w-[68px] flex-col items-center gap-0.5 py-2.5 transition-all duration-200 active:scale-95 touch-manipulation',
+                item.active
+                    ? 'text-primary font-bold'
+                    : 'text-muted-foreground hover:text-foreground font-medium',
+            )}
+        >
+            <Icon className="h-5 w-5" strokeWidth={item.active ? 2.5 : 2} />
+            <span className="text-[10px] leading-none tracking-tight">{item.title}</span>
+            {item.active && <span className="absolute top-1.5 h-0.5 w-4 rounded-full bg-primary" />}
+        </Link>
     );
 }

@@ -7,6 +7,9 @@ import {
     YAxis,
     Tooltip,
     CartesianGrid,
+    Cell,
+    PieChart,
+    Pie,
 } from 'recharts';
 import {
     Wheat,
@@ -58,6 +61,7 @@ interface Props {
     };
     lowStockBahan: LowStock[];
     lowStockProduk: LowStock[];
+    topProduk: Array<{ nama: string; qty: number; omzet: number }>;
 }
 
 const formatRupiah = (value: number) =>
@@ -67,6 +71,7 @@ const formatRupiah = (value: number) =>
         maximumFractionDigits: 0,
     }).format(value);
 
+/** format rupiah singkat utk axis chart */
 const formatRupiahShort = (value: number) => {
     if (Math.abs(value) >= 1_000_000) {
         return `${(value / 1_000_000).toFixed(1)}jt`;
@@ -77,17 +82,7 @@ const formatRupiahShort = (value: number) => {
     return String(Math.round(value));
 };
 
-/** 6 menu pinned ala Gojek - hanya tampil di mobile. */
-const pinnedMenus = [
-    { title: 'Bahan Baku', href: materials.index().url, icon: Wheat, color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400' },
-    { title: 'Produk', href: products.index().url, icon: PackageSearch, color: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400' },
-    { title: 'Belanja PO', href: purchases.index().url, icon: ShoppingCart, color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' },
-    { title: 'Cuan/Boncos', href: reports.incomeStatement().url, icon: BookOpenText, color: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-400' },
-    { title: 'Hitung Ulang', href: stockCorrections.index().url, icon: SearchCheck, color: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400' },
-    { title: 'Split Bill', href: '/split-bills', icon: Split, color: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400' },
-];
-
-export default function DashboardIndex({ batchTrend, summary, lowStockBahan, lowStockProduk }: Props) {
+export default function DashboardIndex({ batchTrend, summary, lowStockBahan, lowStockProduk, topProduk }: Props) {
     const chartData = batchTrend
         .map((b) => ({
             kode: b.kode.replace(/^PO-?/i, ''),
@@ -96,33 +91,22 @@ export default function DashboardIndex({ batchTrend, summary, lowStockBahan, low
         }))
         .reverse();
 
+    // Margin per batch (%) - hanya batch yang sudah ada pendapatan serah
+    const marginData = batchTrend
+        .filter((b) => b.pendapatan > 0)
+        .map((b) => ({
+            kode: b.kode.replace(/^PO-?/i, ''),
+            Margin: Math.max(0, Math.round((b.laba / b.pendapatan) * 100)),
+        }))
+        .reverse();
+
+    // Warna pie tetap per index
+    const PIE_COLORS = ['#E94F87', '#10b981', '#f59e0b', '#8b5cf6', '#0ea5e9'];
+
     return (
         <>
             <Head title="Dashboard" />
             <div className="space-y-4 p-3 md:p-6">
-                {/* ===== Icon menu ala Gojek (hanya mobile) ===== */}
-                <div className="md:hidden rounded-2xl border border-border/70 bg-card p-3 shadow-xs">
-                    <div className="grid grid-cols-3 gap-x-2 gap-y-3">
-                        {pinnedMenus.map((menu) => {
-                            const Icon = menu.icon;
-                            return (
-                                <Link
-                                    key={menu.title}
-                                    href={menu.href}
-                                    className="flex flex-col items-center gap-1.5 rounded-xl py-1 transition-colors active:bg-muted/50 touch-manipulation"
-                                >
-                                    <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${menu.color}`}>
-                                        <Icon className="h-5 w-5" strokeWidth={2} />
-                                    </span>
-                                    <span className="text-[11px] font-semibold leading-tight text-center">
-                                        {menu.title}
-                                    </span>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                </div>
-
                 {/* ===== Ringkasan cuan ===== */}
                 <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
                     <Card className="gap-1 rounded-2xl p-3 shadow-xs md:gap-2 md:p-4">
@@ -249,6 +233,175 @@ export default function DashboardIndex({ batchTrend, summary, lowStockBahan, low
                         )}
                     </CardContent>
                 </Card>
+
+                {/* ===== Margin per batch ===== */}
+                <Card className="rounded-2xl shadow-xs">
+                    <CardHeader className="px-4 pt-4 pb-1 md:px-6 md:pt-5">
+                        <CardTitle className="flex items-center gap-2 text-sm font-bold md:text-base">
+                            <Percent className="h-4 w-4 text-primary" />
+                            Margin per Batch PO (%)
+                        </CardTitle>
+                        <p className="text-[11px] text-muted-foreground md:text-xs">
+                            laba dibagi pendapatan serah terima; batch di bawah 30% perlu dicek harga/HPP
+                        </p>
+                    </CardHeader>
+                    <CardContent className="px-2 pb-3 md:px-6 md:pb-5">
+                        {marginData.length === 0 ? (
+                            <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                                Belum ada batch yang diserahkan.
+                            </p>
+                        ) : (
+                            <div className="h-44 w-full md:h-52">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={marginData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                        <XAxis dataKey="kode" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                                        <YAxis
+                                            tickFormatter={(v) => `${v}%`}
+                                            tick={{ fontSize: 10 }}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            width={40}
+                                            domain={[0, 100]}
+                                        />
+                                        <Tooltip
+                                            formatter={(value) => `${value}%`}
+                                            contentStyle={{
+                                                borderRadius: 12,
+                                                border: '1px solid var(--border)',
+                                                background: 'var(--card)',
+                                                fontSize: 12,
+                                            }}
+                                        />
+                                        <Bar dataKey="Margin" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                                            {marginData.map((entry, i) => (
+                                                <Cell
+                                                    key={`cell-${i}`}
+                                                    fill={entry.Margin >= 30 ? '#10b981' : entry.Margin > 0 ? '#f59e0b' : '#ef4444'}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* ===== Produk terlaris: qty + komposisi omzet ===== */}
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    <Card className="rounded-2xl shadow-xs">
+                        <CardHeader className="px-4 pt-4 pb-1 md:px-6 md:pt-5">
+                            <CardTitle className="flex items-center gap-2 text-sm font-bold md:text-base">
+                                <PackageSearch className="h-4 w-4 text-primary" />
+                                Produk Terlaris (qty)
+                            </CardTitle>
+                            <p className="text-[11px] text-muted-foreground md:text-xs">
+                                5 varian paling banyak terjual (basis serah terima)
+                            </p>
+                        </CardHeader>
+                        <CardContent className="px-2 pb-3 md:px-6 md:pb-5">
+                            {(!topProduk || topProduk.length === 0) ? (
+                                <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                                    Belum ada penjualan yang diserahkan.
+                                </p>
+                            ) : (
+                                <div className="h-44 w-full md:h-52">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart
+                                            data={topProduk}
+                                            layout="vertical"
+                                            margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
+                                            <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                                            <YAxis
+                                                type="category"
+                                                dataKey="nama"
+                                                width={96}
+                                                tick={{ fontSize: 10 }}
+                                                tickLine={false}
+                                                axisLine={false}
+                                            />
+                                            <Tooltip
+                                                formatter={(value) => `${value} pcs`}
+                                                contentStyle={{
+                                                    borderRadius: 12,
+                                                    border: '1px solid var(--border)',
+                                                    background: 'var(--card)',
+                                                    fontSize: 12,
+                                                }}
+                                            />
+                                            <Bar dataKey="qty" fill="#E94F87" radius={[0, 4, 4, 0]} maxBarSize={22} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-2xl shadow-xs">
+                        <CardHeader className="px-4 pt-4 pb-1 md:px-6 md:pt-5">
+                            <CardTitle className="flex items-center gap-2 text-sm font-bold md:text-base">
+                                <Split className="h-4 w-4 text-primary" />
+                                Komposisi Omzet per Produk
+                            </CardTitle>
+                            <p className="text-[11px] text-muted-foreground md:text-xs">
+                                kontribusi tiap varian terhadap omzet total
+                            </p>
+                        </CardHeader>
+                        <CardContent className="px-2 pb-3 md:px-6 md:pb-5">
+                            {(!topProduk || topProduk.length === 0) ? (
+                                <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                                    Belum ada penjualan yang diserahkan.
+                                </p>
+                            ) : (
+                                <div className="flex h-44 items-center md:h-52">
+                                    <div className="h-full w-1/2">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={topProduk}
+                                                    dataKey="omzet"
+                                                    nameKey="nama"
+                                                    innerRadius="52%"
+                                                    outerRadius="86%"
+                                                    paddingAngle={2}
+                                                    strokeWidth={0}
+                                                >
+                                                    {topProduk.map((_, i) => (
+                                                        <Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip
+                                                    formatter={(value) => formatRupiah(Number(value))}
+                                                    contentStyle={{
+                                                        borderRadius: 12,
+                                                        border: '1px solid var(--border)',
+                                                        background: 'var(--card)',
+                                                        fontSize: 12,
+                                                    }}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="flex w-1/2 flex-col gap-1.5 pl-2">
+                                        {topProduk.map((p, i) => (
+                                            <div key={p.nama} className="flex items-center gap-1.5 text-[11px]">
+                                                <span
+                                                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                                    style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                                                />
+                                                <span className="min-w-0 flex-1 truncate font-semibold">{p.nama}</span>
+                                                <span className="shrink-0 text-muted-foreground">{formatRupiahShort(p.omzet)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
 
                 {/* ===== Stok menipis ===== */}
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

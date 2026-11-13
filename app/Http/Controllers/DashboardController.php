@@ -98,6 +98,27 @@ class DashboardController extends Controller
             ])
             ->all();
 
+        // 4. Produk terlaris (qty & omzet, basis serah terima). Satu query.
+        $topProduk = DB::table('detail_penjualans as dp')
+            ->join('penjualans as pj', 'pj.id', '=', 'dp.penjualan_id')
+            ->join('produks as pr', 'pr.id', '=', 'dp.produk_id')
+            ->whereRaw($delivered)
+            ->groupBy('pr.id', 'pr.nama_produk')
+            ->orderByDesc(DB::raw('SUM(dp.qty)'))
+            ->limit(5)
+            ->get([
+                'pr.id',
+                'pr.nama_produk',
+                DB::raw('SUM(dp.qty) as qty'),
+                DB::raw('SUM(dp.subtotal) as omzet'),
+            ])
+            ->map(fn ($row) => [
+                'nama' => $row->nama_produk,
+                'qty' => (int) $row->qty,
+                'omzet' => (float) $row->omzet,
+            ])
+            ->all();
+
         return Inertia::render('Dashboard/Index', [
             'batchTrend' => $batchTrend,
             'summary' => [
@@ -110,6 +131,7 @@ class DashboardController extends Controller
             ],
             'lowStockBahan' => $lowStockBahan,
             'lowStockProduk' => $lowStockProduk,
+            'topProduk' => $topProduk,
         ]);
     }
 }
